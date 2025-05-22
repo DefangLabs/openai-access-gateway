@@ -11,13 +11,17 @@ from mangum import Mangum
 from api.routers.aws import chat, embeddings, model
 from api.routers.gcp import predict
 from api.routers.generic import proxy
-from api.setting import API_ROUTE_PREFIX, DESCRIPTION, GCP_ENDPOINT, GCP_PROJECT_ID, REGION, SUMMARY, PROVIDER, TITLE, USE_MODEL_MAPPING, VERSION
+from api.setting import API_ROUTE_PREFIX, DESCRIPTION, SUMMARY, PROVIDER, TITLE, USE_MODEL_MAPPING, VERSION
 
 from api.modelmapper import load_model_map
 
 if USE_MODEL_MAPPING:
     load_model_map()
 
+def is_GCP():
+    return predict.is_gce() or predict.is_cloud_run()
+
+PROVIDER = os.getenv("PROVIDER", "GCP" if is_GCP() else "AWS")
 
 config = {
     "title": TITLE,

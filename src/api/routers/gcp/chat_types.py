@@ -20,13 +20,3 @@ class ChatCompletionResponse(BaseModel):
     id: str
     object: str = "chat.completion"
     choices: List[ChatCompletionChoice]
-
-class Message(BaseModel):
-    role: str
-    content: str
-
-class ChatRequest(BaseModel):
-    model: str  # e.g., gemini-1.5-pro-preview-0409
-    messages: List[Message]
-    temperature: Optional[float] = 0.7
-    max_tokens: Optional[int] = 512

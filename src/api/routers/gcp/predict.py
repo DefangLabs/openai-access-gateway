@@ -1,5 +1,5 @@
 import requests
-import os
+import logging
 from fastapi import APIRouter, Depends
 from api.setting import PROVIDER
 from google.cloud import aiplatform_v1beta1, aiplatform
@@ -12,20 +12,47 @@ from api.routers.gcp.chat_types import ChatRequest, ChatCompletionResponse
 from vertexai.preview.generative_models import GenerativeModel
 import vertexai
 
+client = None
+
 router = APIRouter(
     prefix="/chat",
     dependencies=[Depends(api_key_auth)],
     responses={404: {"description": "Not found"}},
 )
 
-client = None
+def is_gce():
+    try:
+        resp = requests.get(
+            "http://metadata.google.internal/computeMetadata/v1/instance/name",
+            headers={"Metadata-Flavor": "Google"},
+            timeout=1,
+        )
+        return resp.status_code == 200
+    except:
+        return False
 
-def get_project_and_location():
+def is_cloud_run():
+    try:
+        resp = requests.get(
+            "http://metadata.google.internal/computeMetadata/v1/instance/attributes/gae_environment",
+            headers={"Metadata-Flavor": "Google"},
+            timeout=1,
+        )
+        return resp.ok and "standard" in resp.text
+    except:
+        return False
+
+def get_project_and_location_and_auth():
     from google.auth import default
 
     # Try ADC for project
 
     # Try metadata server for region
+    credentials = None
+    project_id = None
+    location = None
+    auth_req = None
+
     try:
         credentials, project_id = default()
         zone = requests.get(
@@ -34,10 +61,11 @@ def get_project_and_location():
             timeout=1
         ).text
         location = zone.split("/")[-1].rsplit("-", 1)[0]
+        auth_req = google.auth.transport.requests.Request()
     except Exception:
-        location = os.getenv("GCP_LOCATION", "us-central1")
+        logging.warning(f"Error: Failed to get project and location from metadata server.")
 
-    return credentials, project_id, location
+    return credentials, project_id, location, auth_req
 
 def to_vertex_content(messages):
     return [
@@ -56,15 +84,15 @@ def aggregate_parts(response):
                 generated_texts.append(part.text)
     return "\n".join(generated_texts)
 
-credentials, project_id, location = get_project_and_location()
-auth_req = google.auth.transport.requests.Request()
+credentials, project_id, location, auth_req = get_project_and_location_and_auth()
 
-vertexai.init(
-    project=project_id,
-    location=location,
-)
+if project_id and location:
+    vertexai.init(
+        project=project_id,
+        location=location,
+    )
+    client = aiplatform_v1beta1.PredictionServiceClient()
 
-client = aiplatform_v1beta1.PredictionServiceClient()
 
 def make_response(content):
     return {
