@@ -11,6 +11,7 @@ from mangum import Mangum
 from api.routers.aws import chat, embeddings, model
 from api.routers.gcp import predict
 from api.routers.generic import proxy
+from api.models import bedrock
 from api.setting import API_ROUTE_PREFIX, DESCRIPTION, SUMMARY, PROVIDER, TITLE, USE_MODEL_MAPPING, VERSION
 
 from api.modelmapper import load_model_map
@@ -18,10 +19,12 @@ from api.modelmapper import load_model_map
 if USE_MODEL_MAPPING:
     load_model_map()
 
-def is_GCP():
-    return predict.is_gce() or predict.is_cloud_run()
 
-PROVIDER = os.getenv("PROVIDER", "GCP" if is_GCP() else "AWS")
+if PROVIDER == None:
+    if predict.is_gcp():
+        PROVIDER = "gcp"
+    else:
+        PROVIDER = "aws"
 
 config = {
     "title": TITLE,
@@ -48,7 +51,7 @@ app.add_middleware(
 if os.getenv("PROXY_TARGET"):
     logging.info("Proxy target set to: Generic")
     app.include_router(proxy.router, prefix=API_ROUTE_PREFIX)
-elif PROVIDER.lower() == "gcp":
+elif PROVIDER == "gcp":
     logging.info("Proxy target set to: GCP")
     app.include_router(predict.router, prefix=API_ROUTE_PREFIX)
 else:

@@ -55,6 +55,12 @@ bedrock_client = boto3.client(
     config=config,
 )
 
+def is_aws():
+    try:
+        res = requests.get("http://169.254.169.254/latest/meta-data/", timeout=0.5)
+        return res.ok
+    except:
+        return False
 
 def get_inference_region_prefix():
     if AWS_REGION.startswith("ap-"):

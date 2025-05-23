@@ -1,13 +1,14 @@
 import requests
 import logging
 from fastapi import APIRouter, Depends
-from api.setting import PROVIDER
 from google.cloud import aiplatform_v1beta1, aiplatform
 import google.auth.transport.requests
 
 from api.auth import api_key_auth
 from api.modelmapper import get_model
 from api.routers.gcp.chat_types import ChatRequest, ChatCompletionResponse
+
+from api.setting import GCP_PROJECT_ID, GCP_REGION
 
 from vertexai.preview.generative_models import GenerativeModel
 import vertexai
@@ -20,50 +21,42 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
-def is_gce():
+def is_gcp():
     try:
-        resp = requests.get(
-            "http://metadata.google.internal/computeMetadata/v1/instance/name",
+        res = requests.get(
+            "http://metadata.google.internal/computeMetadata/v1/project/project-id",
             headers={"Metadata-Flavor": "Google"},
-            timeout=1,
+            timeout=0.5
         )
-        return resp.status_code == 200
-    except:
-        return False
-
-def is_cloud_run():
-    try:
-        resp = requests.get(
-            "http://metadata.google.internal/computeMetadata/v1/instance/attributes/gae_environment",
-            headers={"Metadata-Flavor": "Google"},
-            timeout=1,
-        )
-        return resp.ok and "standard" in resp.text
+        return res.ok
     except:
         return False
 
 def get_project_and_location_and_auth():
     from google.auth import default
 
-    # Try ADC for project
-
     # Try metadata server for region
     credentials = None
-    project_id = None
-    location = None
+    project_id = GCP_PROJECT_ID
+    location = GCP_REGION
     auth_req = None
 
     try:
-        credentials, project_id = default()
-        zone = requests.get(
-            "http://metadata.google.internal/computeMetadata/v1/instance/zone",
-            headers={"Metadata-Flavor": "Google"},
-            timeout=1
-        ).text
-        location = zone.split("/")[-1].rsplit("-", 1)[0]
+        credentials, project = default()
+        if not project_id:
+            project_id = project
+
+        if not location:
+            zone = requests.get(
+                "http://metadata.google.internal/computeMetadata/v1/instance/zone",
+                headers={"Metadata-Flavor": "Google"},
+                timeout=1
+            ).text
+            location = zone.split("/")[-1].rsplit("-", 1)[0]
+
         auth_req = google.auth.transport.requests.Request()
     except Exception:
-        logging.warning(f"Error: Failed to get project and location from metadata server.")
+        logging.warning(f"Error: Failed to get project and location from metadata server. Using local settings.")
 
     return credentials, project_id, location, auth_req
 
@@ -113,7 +106,7 @@ def make_response(content):
 def handle_gemini(request: ChatRequest):
     content = ""
     try:
-        modelId = get_model(PROVIDER, request.model) 
+        modelId = get_model("gcp", request.model) 
         model_name = modelId.split("/")[-1]
         model = GenerativeModel(model_name)
 
@@ -137,7 +130,7 @@ def to_prompt_instances(messages):
         ]
 
 def handle_vertex(request: ChatRequest):
-    modelId = get_model(PROVIDER, request.model)
+    modelId = get_model("gcp", request.model)
     endpoint = f"https://{location}-aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/{location}/{modelId}:rawPredict"
     payload = {"instances": to_prompt_instances(request.messages)}
 
@@ -151,7 +144,7 @@ def handle_vertex(request: ChatRequest):
     return make_response(response.json())
 
 # def handle_predict(request: ChatRequest):
-#     modelId = get_model(PROVIDER, request.model)
+#     modelId = get_model("gcp", request.model)
 #     model = aiplatform.Model(modelId)
 #     payload = to_prompt_instances(request.messages)
 #     prediction = model.predict(instances=payload)
@@ -160,7 +153,7 @@ def handle_vertex(request: ChatRequest):
 @router.post("/completions", response_model=ChatCompletionResponse)
 async def chat_completion(request: ChatRequest):
     credentials.refresh(auth_req)
-    model = get_model(PROVIDER, request.model)
+    model = get_model("gcp", request.model)
     if "gemini" in model.lower():
         return handle_gemini(request)
     else:
