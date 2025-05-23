@@ -1,7 +1,6 @@
 import os
 import json
 from pathlib import Path
-from api.setting import FALLBACK_MODEL
 
 _model_map = None
 
@@ -17,7 +16,4 @@ def get_model(provider, model):
     model = model.lower()
 
     available_models = _model_map.get(provider, {})
-    if FALLBACK_MODEL == None or FALLBACK_MODEL.lower() == model:
-        return available_models.get(model, model)
-    else:
-        return available_models.get(model, get_model(provider, FALLBACK_MODEL))
+    return available_models.get(model, model)

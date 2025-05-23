@@ -14,23 +14,12 @@ class TestModelMapper(unittest.TestCase):
         result = get_model("provider1", "model1")
         self.assertEqual(result, "mapped_model1")
 
-    @patch("api.modelmapper.FALLBACK_MODEL", "fallback_model")
-    def test_get_model_with_non_existing_model(self):
-        result = get_model("provider1", "non_existing_model")
-        self.assertEqual(result, "fallback_model")
-
-    @patch("api.modelmapper.FALLBACK_MODEL", None)
-    def test_get_model_with_no_fallback(self):
-        result = get_model("provider1", "non_existing_model")
-        self.assertEqual(result, "non_existing_model")
-
     @patch("api.modelmapper._model_map", {
         "provider1": {
             "model1": "mapped_model1"
         }
     })
 
-    @patch("api.modelmapper.FALLBACK_MODEL", "fallback_model")
     def test_get_model_with_case_insensitivity(self):
         result = get_model("PROVIDER1", "MODEL1")
         self.assertEqual(result, "mapped_model1")
