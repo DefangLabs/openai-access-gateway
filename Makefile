@@ -16,7 +16,7 @@ no-diff:
 	git diff-index --quiet HEAD -- src     # check that there are no uncommitted changes
 
 .PHONY: push
-push: login
+push: no-diff login
 	docker buildx build \
 		--platform linux/amd64,linux/arm64 \
 		--build-arg DEFAULT_MODEL=$(DEFAULT_MODEL) \
