@@ -11,14 +11,12 @@ from mangum import Mangum
 from api.routers.aws import chat, embeddings, model
 from api.routers.gcp import predict
 from api.routers.generic import proxy
-from api.models import bedrock
 from api.setting import API_ROUTE_PREFIX, DESCRIPTION, SUMMARY, PROVIDER, TITLE, USE_MODEL_MAPPING, VERSION
 
 from api.modelmapper import load_model_map
 
 if USE_MODEL_MAPPING:
     load_model_map()
-
 
 if PROVIDER == None:
     if predict.is_gcp():
