@@ -22,6 +22,7 @@ push: no-diff login
 		--build-arg DEFAULT_MODEL=$(DEFAULT_MODEL) \
 		-f ./src/Dockerfile_ecs \
 		-t $(DOCKER_IMAGE_NAME):$(VERSION) \
+		-t $(DOCKER_IMAGE_NAME):latest \
 		--push \
 		./src
 
