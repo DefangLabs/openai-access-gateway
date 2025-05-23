@@ -57,6 +57,7 @@ bedrock_client = boto3.client(
 
 def is_aws():
     try:
+        # contact aws metadata service, will be available in AWS environment
         res = requests.get("http://169.254.169.254/latest/meta-data/", timeout=0.5)
         return res.ok
     except:

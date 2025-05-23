@@ -23,6 +23,7 @@ router = APIRouter(
 
 def is_gcp():
     try:
+        # contact gcp metadata server to check if running on GCP
         res = requests.get(
             "http://metadata.google.internal/computeMetadata/v1/project/project-id",
             headers={"Metadata-Flavor": "Google"},
