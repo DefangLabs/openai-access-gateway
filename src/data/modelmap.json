@@ -27,5 +27,6 @@
     "default": "us.amazon.nova-micro-v1:0"
   },
   "gcp": {
+    "default": "google/models/gemini-2.0-flash-lite-001"
   }
 }
