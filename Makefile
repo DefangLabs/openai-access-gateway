@@ -11,32 +11,19 @@ DOCKER_IMAGE_AMD64:=$(DOCKER_IMAGE_NAME):amd64-$(VERSION)
 
 DEFAULT_MODEL := default
 
-.PHONY: image-amd64
-image-amd64:
-	docker build --platform linux/amd64 --build-arg DEFAULT_MODEL=$(DEFAULT_MODEL) -f ./src/Dockerfile_ecs -t ${PROJECT_NAME} -t $(DOCKER_IMAGE_AMD64) ./src
-
-.PHONY: image-arm64
-image-arm64:
-	docker build --platform linux/arm64 --build-arg DEFAULT_MODEL=$(DEFAULT_MODEL) -f ./src/Dockerfile_ecs -t ${PROJECT_NAME} -t $(DOCKER_IMAGE_ARM64) ./src
-
-.PHONY: images
-images: image-amd64 image-arm64 ## Build all docker images and manifest
-
-.PHONY: push-images
-push-images: images login ## Push all docker images
-	docker push $(DOCKER_IMAGE_AMD64)
-	docker push $(DOCKER_IMAGE_ARM64)
-	docker manifest create --amend $(DOCKER_IMAGE_NAME):$(VERSION) $(DOCKER_IMAGE_AMD64) $(DOCKER_IMAGE_ARM64)
-	docker manifest push --purge $(DOCKER_IMAGE_NAME):$(VERSION)
-
 .PHONY: no-diff
 no-diff:
-	git diff-index --quiet HEAD --       # check that there are no uncommitted changes
+	git diff-index --quiet HEAD -- src     # check that there are no uncommitted changes
 
 .PHONY: push
-push: no-diff push-images ## Push all docker images and "latest" manifest
-	docker manifest create --amend $(DOCKER_IMAGE_NAME):latest $(DOCKER_IMAGE_AMD64) $(DOCKER_IMAGE_ARM64)
-	docker manifest push --purge $(DOCKER_IMAGE_NAME):latest
+push: login
+	docker buildx build \
+		--platform linux/amd64,linux/arm64 \
+		--build-arg DEFAULT_MODEL=$(DEFAULT_MODEL) \
+		-f ./src/Dockerfile_ecs \
+		-t $(DOCKER_IMAGE_NAME):$(VERSION) \
+		--push \
+		./src
 
 .PHONY: login
 login: ## Login to docker
