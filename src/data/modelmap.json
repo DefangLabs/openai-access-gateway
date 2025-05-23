@@ -35,10 +35,12 @@
     "default": "us.amazon.nova-micro-v1:0"
   },
   "gcp": {
-    "ai/mistral": "mistralai/models/mistral-small-2503",
-    "ai/mistral:latest": "mistralai/models/mistral-small-2503",
     "ai/smollm2": "google/models/gemini-2.0-flash-lite-001",
     "ai/smollm2:latest": "google/models/gemini-2.0-flash-lite-001",
+    "gemini-2.5-pro": "google/models/gemini-2.5-pro-preview-05-06",
+    "gemini-2.5-flash": "google/models/gemini-2.5-flash-preview-05-20",
+    "gemini-2.0-flash": "google/models/gemini-2.0-flash-001",
+    "gemini-2.0-flash-lite": "google/models/gemini-2.0-flash-lite-001",
     "default": "google/models/gemini-2.0-flash-lite-001"
   }
 }

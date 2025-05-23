@@ -1,7 +1,7 @@
 import requests
 import logging
-from fastapi import APIRouter, Depends
-from google.cloud import aiplatform_v1beta1, aiplatform
+from fastapi import APIRouter, Depends, HTTPException
+from google.cloud import aiplatform_v1beta1
 import google.auth.transport.requests
 
 from api.auth import api_key_auth
@@ -33,7 +33,7 @@ def is_gcp():
     except:
         return False
 
-def get_project_and_location_and_auth():
+def get_project_details():
     from google.auth import default
 
     # Try metadata server for region
@@ -78,7 +78,7 @@ def aggregate_parts(response):
                 generated_texts.append(part.text)
     return "\n".join(generated_texts)
 
-credentials, project_id, location, auth_req = get_project_and_location_and_auth()
+credentials, project_id, location, auth_req = get_project_details()
 
 if project_id and location:
     vertexai.init(
@@ -130,19 +130,20 @@ def to_prompt_instances(messages):
             for msg in messages
         ]
 
-def handle_vertex(request: ChatRequest):
-    modelId = get_model("gcp", request.model)
-    endpoint = f"https://{location}-aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/{location}/{modelId}:rawPredict"
-    payload = {"instances": to_prompt_instances(request.messages)}
+# needs more testing before enabling
+# def handle_vertex(request: ChatRequest):
+#     modelId = get_model("gcp", request.model)
+#     endpoint = f"https://{location}-aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/{location}/{modelId}:rawPredict"
+#     payload = {"instances": to_prompt_instances(request.messages)}
 
-    # Send request
-    headers = {
-        "Authorization": f"Bearer {credentials.token}",
-        "Content-Type": "application/json"
-    }
+#     # Send request
+#     headers = {
+#         "Authorization": f"Bearer {credentials.token}",
+#         "Content-Type": "application/json"
+#     }
 
-    response = requests.post(endpoint, headers=headers, json=payload)
-    return make_response(response.json())
+#     response = requests.post(endpoint, headers=headers, json=payload)
+#     return make_response(response.json())
 
 # def handle_predict(request: ChatRequest):
 #     modelId = get_model("gcp", request.model)
@@ -158,5 +159,8 @@ async def chat_completion(request: ChatRequest):
     if "gemini" in model.lower():
         return handle_gemini(request)
     else:
-        return handle_vertex(request)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported model '{request.model}'. Only Gemini models are supported."
+        )
 
