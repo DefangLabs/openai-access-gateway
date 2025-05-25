@@ -40,6 +40,15 @@ class TestModelMapper(unittest.TestCase):
             modelmapper._model_map,
             {"provider1": {"model1": "mapped_model1"}}
         )
-        
+
+    @patch("api.modelmapper._model_map", {
+    "GCP": {
+        "model1": "publisher/mapped_model1",
+    }})
+    def test_get_model_with_gcp(self):
+        result = get_model("provider1", "model1")
+        self.assertEqual(result, "mapped_model1")
+
+
 if __name__ == "__main__":
     unittest.main()

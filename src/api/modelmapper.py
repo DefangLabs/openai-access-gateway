@@ -15,5 +15,8 @@ def get_model(provider, model):
     provider = provider.lower()
     model = model.lower()
 
+    if provider == "gcp":
+        model = model.removeprefix("publishers/")
+
     available_models = _model_map.get(provider, {})
     return available_models.get(model, model)
