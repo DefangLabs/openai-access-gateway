@@ -1,5 +1,5 @@
 import logging
-
+import requests
 import uvicorn
 from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
@@ -11,16 +11,67 @@ import json
 import os
 from contextlib import asynccontextmanager
 
-from api.routers import chat, embeddings, model
-from api.setting import API_ROUTE_PREFIX, DESCRIPTION, GCP_ENDPOINT, GCP_PROJECT_ID, REGION, SUMMARY, PROVIDER, TITLE, USE_MODEL_MAPPING, VERSION
+from api.setting import API_ROUTE_PREFIX, DESCRIPTION, GCP_ENDPOINT, GCP_PROJECT_ID, GCP_REGION, SUMMARY, PROVIDER, TITLE, USE_MODEL_MAPPING, VERSION
 
 from google.auth import default
 from google.auth.transport.requests import Request as AuthRequest
 
 from api.modelmapper import get_model, load_model_map
 
+# GCP credentials and project details
+credentials = None
+project_id = None
+location = None
+
+def is_aws():
+    env = os.getenv("AWS_EXECUTION_ENV")
+    if env == "AWS_ECS_FARGATE":
+        return True
+    elif env == "AWS_ECS_EC2":
+        return True
+    elif os.getenv("ECS_CONTAINER_METADATA_URI_V4"):
+        return True
+    return False
+
+provider = PROVIDER.lower() if PROVIDER else None
+if provider == None:
+    if is_aws():
+        provider = "aws"
+    else:
+        provider = "gcp"
+
 if USE_MODEL_MAPPING:
     load_model_map()
+
+
+def get_gcp_project_details():
+    from google.auth import default
+
+    # Try metadata server for region
+    credentials = None
+    project_id = GCP_PROJECT_ID
+    location = GCP_REGION
+
+    try:
+        credentials, project = default()
+        if not project_id:
+            project_id = project
+
+        if not location:
+            zone = requests.get(
+                "http://metadata.google.internal/computeMetadata/v1/instance/zone",
+                headers={"Metadata-Flavor": "Google"},
+                timeout=1
+            ).text
+            location = zone.split("/")[-1].rsplit("-", 1)[0]
+
+    except Exception:
+        logging.warning(f"Error: Failed to get project and location from metadata server. Using local settings.")
+
+    return credentials, project_id, location
+
+if not is_aws():
+    credentials, project_id, location = get_gcp_project_details()
 
 # Utility: get service account access token
 def get_access_token():
@@ -33,8 +84,8 @@ def get_gcp_target():
     """
     Check if the environment variable is set to use GCP.
     """
-    if GCP_PROJECT_ID and REGION:
-        return f"https://{REGION}-aiplatform.googleapis.com/v1beta1/projects/{GCP_PROJECT_ID}/locations/{REGION}/endpoints/{GCP_ENDPOINT}/"
+    if project_id and location:
+        return f"https://{location}-aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/{location}/{GCP_ENDPOINT}/"
 
     return None
 
@@ -76,7 +127,12 @@ async def handle_proxy(request: Request, path: str):
 
         if USE_MODEL_MAPPING:
             request_model = data.get("model", None)
-            data["model"] = get_model(PROVIDER, request_model)
+            model = get_model("gcp", request_model)
+
+            if model != None and model != request_model and "publishers/google/" in model:
+                model = f"google/{model.split('/')[-1]}"
+
+            data["model"] = model
             content = json.dumps(data)
 
         async with httpx.AsyncClient() as client:
@@ -118,13 +174,8 @@ logging.basicConfig(
 )
 
 proxy_target = get_proxy_target()
-if proxy_target:
-    logging.info(f"Proxy target set to: {proxy_target}")
-else:
-    logging.info("No proxy target set. Using internal routers.")
 
 app = FastAPI(**config)
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -133,13 +184,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-if proxy_target:
+if provider != "aws" and proxy_target:
     logging.info(f"Proxy target set to: {proxy_target}")
     @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"])
     async def proxy(request: Request, path: str):
         return await handle_proxy(request, path)
-
 else:
+    from api.routers import chat, embeddings, model
     logging.info("No proxy target set. Using internal routers.")
     app.include_router(model.router, prefix=API_ROUTE_PREFIX)
     app.include_router(chat.router, prefix=API_ROUTE_PREFIX)
