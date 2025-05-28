@@ -93,7 +93,6 @@ def get_header(request, path):
     if "chat/completions" in path:
         path = path.replace("chat/completions", "endpoints/openapi/chat/completions")
 
-
     path_no_prefix = f"/{path.lstrip('/')}".removeprefix(API_ROUTE_PREFIX)
     target_url = get_gcp_target(path_no_prefix)
 
