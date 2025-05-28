@@ -11,7 +11,7 @@ import json
 import os
 from contextlib import asynccontextmanager
 
-from api.setting import API_ROUTE_PREFIX, DESCRIPTION, GCP_ENDPOINT, GCP_PROJECT_ID, GCP_REGION, SUMMARY, PROVIDER, TITLE, USE_MODEL_MAPPING, VERSION
+from api.setting import API_ROUTE_PREFIX, DESCRIPTION, GCP_PROJECT_ID, GCP_REGION, SUMMARY, PROVIDER, TITLE, USE_MODEL_MAPPING, VERSION
 
 from google.auth import default
 from google.auth.transport.requests import Request as AuthRequest
@@ -80,31 +80,22 @@ def get_access_token():
     credentials.refresh(auth_request)
     return credentials.token
 
-def get_gcp_target():
+def get_gcp_target(path):
     """
     Check if the environment variable is set to use GCP.
     """
-    if project_id and location:
-        return f"https://{location}-aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/{location}/{GCP_ENDPOINT}/"
-
-    return None
-
-def get_proxy_target():
-    """
-    Check if the environment variable is set to use a proxy.
-    """
-    proxy_target = os.getenv("PROXY_TARGET")
-    if proxy_target:
-        return proxy_target
-    gcp_target = get_gcp_target()
-    if gcp_target:
-        return gcp_target
-
-    return None
+    if os.getenv("PROXY_TARGET"):
+        return os.getenv("PROXY_TARGET")
+    else:
+        return f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/{path.lstrip('/')}".rstrip("/")
 
 def get_header(request, path):
+    if "chat/completions" in path:
+        path = path.replace("chat/completions", "endpoints/openapi/chat/completions")
+
+
     path_no_prefix = f"/{path.lstrip('/')}".removeprefix(API_ROUTE_PREFIX)
-    target_url = f"{proxy_target.rstrip('/')}/{path_no_prefix.lstrip('/')}".rstrip("/")
+    target_url = get_gcp_target(path_no_prefix)
 
     # remove hop-by-hop headers
     headers = {
@@ -123,16 +114,17 @@ async def handle_proxy(request: Request, path: str):
 
     try:
         content = await request.body()
-        data = json.loads(content)
 
         if USE_MODEL_MAPPING:
-            request_model = data.get("model", None)
-            model = get_model("gcp", request_model)
+            data = json.loads(content)
+            if "model" in data:
+                request_model = data.get("model", None)
+                model = get_model("gcp", request_model)
 
-            if model != None and model != request_model and "publishers/google/" in model:
-                model = f"google/{model.split('/')[-1]}"
+                if model != None and model != request_model and "publishers/google/" in model:
+                    model = f"google/{model.split('/')[-1]}"
 
-            data["model"] = model
+                data["model"]= model
             content = json.dumps(data)
 
         async with httpx.AsyncClient() as client:
@@ -173,8 +165,6 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 
-proxy_target = get_proxy_target()
-
 app = FastAPI(**config)
 app.add_middleware(
     CORSMiddleware,
@@ -184,8 +174,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-if provider != "aws" and proxy_target:
-    logging.info(f"Proxy target set to: {proxy_target}")
+if provider != "aws":
+    logging.info(f"Proxy target set to: GCP")
     @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"])
     async def proxy(request: Request, path: str):
         return await handle_proxy(request, path)
