@@ -3,6 +3,7 @@ import json
 from unittest.mock import patch, MagicMock
 from fastapi import Request
 from starlette.datastructures import Headers, QueryParams
+from fastapi import Response
 
 import api.routers.vertex as vertex
 
@@ -33,37 +34,24 @@ def test_to_vertex_anthropic():
     assert isinstance(result["messages"], list)
     assert result["messages"][0]["role"] == "user"
     assert result["messages"][0]["content"][0]["text"] == "Hello!"
+    assert result["messages"][1]["role"] == "assistant"
+    assert result["messages"][1]["content"][0]["text"] == "Hi there!"
 
-def test_from_vertex_anthropic_to_openai():
+def test_from_anthropic_to_openai_response():
     msg = json.dumps({
         "id": "abc123",
         "role": "assistant",
-        "content": [{"type": "text", "text": "Hello!"}],
+        "content": [{"type": "text", "text": "Hello!"}, {"type": "text", "text": "Bye!"}],
         "stop_reason": "stop",
         "usage": {"prompt_tokens": 5, "completion_tokens": 2}
     })
-    result = json.loads(vertex.from_vertex_anthropic_to_openai(msg))
+    result = json.loads(vertex.from_anthropic_to_openai_response(msg))
     assert result["id"] == "abc123"
     assert result["object"] == "chat.completion"
-    assert result["choices"][0]["message"]["content"] == "Hello!"
+    assert len(result["choices"]) == 1
+    assert result["choices"][0]["message"]["content"] == "Hello!Bye!"
     assert result["choices"][0]["finish_reason"] == "stop"
     assert result["usage"]["prompt_tokens"] == 5
-
-def test_to_openai_response():
-    resp = {
-        "candidates": [
-            {
-                "content": {"parts": [{"text": "Hello!"}]},
-                "finishReason": "STOP"
-            }
-        ]
-    }
-    result = vertex.to_openai_response(resp)
-    assert result["object"] == "chat.completion"
-    assert result["choices"][0]["message"]["content"] == "Hello!"
-    assert result["choices"][0]["finish_reason"] == "stop"
-    assert result["choices"][0]["index"] == 0
-    assert result["id"].startswith("chatcmpl-")
 
 def test_get_gcp_target_env(monkeypatch):
     monkeypatch.setenv("PROXY_TARGET", "https://custom-proxy")
@@ -105,7 +93,7 @@ def test_get_header_removes_hop_headers(mock_token, dummy_request):
     assert "Connection" not in headers
     assert "Authorization" in headers
     assert headers["Authorization"] == "Bearer dummy-token"
-    assert headers["X-Custom"] == "foo"
+    assert headers["x-custom"] == "foo"
 
 @pytest.mark.asyncio
 @patch("api.routers.vertex.httpx.AsyncClient")
@@ -126,3 +114,86 @@ async def test_handle_proxy_basic(mock_get_model, mock_get_header, mock_async_cl
     assert result.status_code == 200
     assert b"hi" in result.body
     assert result.headers["content-type"] == "application/json"
+
+@pytest.mark.asyncio
+@patch("api.routers.vertex.httpx.AsyncClient")
+@patch("api.routers.vertex.get_header")
+@patch("api.routers.vertex.get_model", return_value="test-model")
+async def test_handle_proxy_known_chat_model(
+    mock_get_model, mock_get_header, mock_async_client, dummy_request
+):
+    req = dummy_request(body=json.dumps({"model": "foo"}).encode())
+    mock_get_header.return_value = ("http://target", {"Authorization": "Bearer token"})
+    mock_response = MagicMock()
+    mock_response.content = b'{"candidates":[{"content":{"parts":[{"text":"hi"}]}, "finishReason":"STOP"}]}'
+    mock_response.status_code = 200
+    mock_response.headers = {"content-type": "application/json"}
+    mock_async_client.return_value.__aenter__.return_value.request.return_value = mock_response
+
+    vertex.USE_MODEL_MAPPING = True
+    if "test-model" not in vertex.known_chat_models:
+        vertex.known_chat_models.append("test-model")
+
+    result = await vertex.handle_proxy(req, "/v1/chat/completions")
+    assert isinstance(result, Response)
+    assert result.status_code == 200
+    assert b"hi" in result.body
+    assert result.headers["content-type"] == "application/json"
+
+@pytest.mark.asyncio
+@patch("api.routers.vertex.httpx.AsyncClient")
+@patch("api.routers.vertex.get_header")
+@patch("api.routers.vertex.get_model", return_value="anthropic-model")
+async def test_handle_proxy_anthropic_conversion(
+    mock_get_model, mock_get_header, mock_async_client, dummy_request
+):
+    req = dummy_request(body=json.dumps({"model": "foo", "messages": [{"role": "user", "content": "hi"}]}).encode())
+    mock_get_header.return_value = ("http://target", {"Authorization": "Bearer token"})
+    mock_response = MagicMock()
+    # Simulate anthropic response
+    anthropic_resp = json.dumps({
+        "id": "abc123",
+        "role": "assistant",
+        "content": [{"type": "text", "text": "Hello!"}],
+        "stop_reason": "stop",
+        "usage": {"prompt_tokens": 5, "completion_tokens": 2}
+    }).encode()
+    mock_response.content = anthropic_resp
+    mock_response.status_code = 200
+    mock_response.headers = {"content-type": "application/json"}
+    mock_async_client.return_value.__aenter__.return_value.request.return_value = mock_response
+
+    vertex.USE_MODEL_MAPPING = True
+    # Ensure model is not in known_chat_models to trigger conversion
+    if "anthropic-model" in vertex.known_chat_models:
+        vertex.known_chat_models.remove("anthropic-model")
+    result = await vertex.handle_proxy(req, "/v1/chat/completions")
+    assert isinstance(result, Response)
+    data = json.loads(result.body)
+    assert data["object"] == "chat.completion"
+    assert data["choices"][0]["message"]["content"] == "Hello!"
+
+@pytest.mark.asyncio
+@patch("api.routers.vertex.httpx.AsyncClient", side_effect=Exception("network error"))
+@patch("api.routers.vertex.get_header")
+@patch("api.routers.vertex.get_model", return_value="test-model")
+async def test_handle_proxy_httpx_exception(
+    mock_get_model, mock_get_header, mock_async_client, dummy_request
+):
+    req = dummy_request(body=json.dumps({"model": "foo"}).encode())
+    mock_get_header.return_value = ("http://target", {"Authorization": "Bearer token"})
+    vertex.USE_MODEL_MAPPING = True
+    if "test-model" not in vertex.known_chat_models:
+        vertex.known_chat_models.append("test-model")
+    # Patch httpx.RequestError to be raised
+    with patch("api.routers.vertex.httpx.RequestError", Exception):
+        result = await vertex.handle_proxy(req, "/v1/chat/completions")
+        assert isinstance(result, Response)
+        assert result.status_code == 502
+        assert b"Upstream request failed" in result.body
+    # Assert that the status code is 502 (Bad Gateway) due to upstream failure
+    assert result.status_code == 502
+
+    # Assert that the response body contains the expected error message
+    assert b"Upstream request failed" in result.body
+

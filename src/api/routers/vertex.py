@@ -97,7 +97,7 @@ def get_header(model, request, path):
     # Fetch service account token
     access_token = get_access_token()
     headers["Authorization"] = f"Bearer {access_token}"
-    return target_url,headers
+    return target_url, headers
 
 def to_vertex_anthropic(openai_messages):
     message = [
@@ -114,7 +114,7 @@ def to_vertex_anthropic(openai_messages):
         "messages": message
     }
 
-def from_vertex_anthropic_to_openai(msg):
+def from_anthropic_to_openai_response(msg):
     msg_json = json.loads(msg)
     return json.dumps({
         "id": msg_json["id"],
@@ -136,35 +136,7 @@ def from_vertex_anthropic_to_openai(msg):
         "usage": msg_json.get("usage", {})
     })
 
-def to_openai_response(resp):
-    """
-    Convert an Vertex AI response to an OpenAI-style chat completion format.
-    """
-    if "candidates" not in resp or not resp["candidates"]:
-        raise ValueError("No candidates in response")
-
-    choices = []
-    for i, candidate in enumerate(resp["candidates"]):
-        content_parts = candidate.get("content", {}).get("parts", [])
-        text = "".join(part.get("text", "") for part in content_parts)
-
-        choices.append({
-            "index": i,
-            "message": {
-                "role": "assistant",
-                "content": text
-            },
-            "finish_reason": candidate.get("finishReason", "stop").lower()
-        })
-
-    return {
-        "id": f"chatcmpl-{uuid.uuid4().hex[:8]}",
-        "object": "chat.completion",
-        "choices": choices
-    }
-
 async def handle_proxy(request: Request, path: str):
-
     try:
         content = await request.body()
         content_json = json.loads(content)
@@ -203,7 +175,7 @@ async def handle_proxy(request: Request, path: str):
         if needs_conversion:
             # convert vertex response to openai format
             if "anthropic" in model:
-                content = from_vertex_anthropic_to_openai(response.content)
+                content = from_anthropic_to_openai_response(response.content)
 
     except httpx.RequestError as e:
         logging.error(f"Proxy request failed: {e}")
