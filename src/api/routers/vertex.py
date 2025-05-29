@@ -13,6 +13,26 @@ from google.auth.transport.requests import Request as AuthRequest
 
 from api.modelmapper import get_model
 
+known_chat_models = [
+    "publishers/meta-llama/models/llama-3-1-8b-instruct",
+    "publishers/meta-llama/models/llama-3-8b-instruct",
+    "publishers/mistral-ai/models/mistral-7b-instruct-v0.3",
+    "publishers/mistral-ai/models/mistral-nemo-instruct-2407",
+    "publishers/mistral-ai/models/mistral-nemo@2407",
+    "publishers/mistral-ai/models/mistral-7b-instruct@v0.3",
+    "publishers/google/models/gemma-2-27b-it",
+    "publishers/google/models/gemma-2-9b-it",
+    "publishers/google/models/gemma-2b"
+    "publishers/google/models/gemini-2.0-flash-001",
+    "publishers/google/models/gemini-2.0-flash-lite-001",
+    "publishers/google/models/gemini-2.5-pro-preview-05-06",
+    "publishers/google/models/gemini-2.5-flash-preview-05-20",
+    "publishers/meta/models/llama3-8b",
+    "publishers/meta/models/llama-3-1-8b-instruct",
+    "publishers/meta/models/llama2-7b",
+]
+
+
 # GCP credentials and project details
 credentials = None
 project_id = None
@@ -53,21 +73,20 @@ def get_access_token():
     credentials.refresh(auth_request)
     return credentials.token
 
-def get_gcp_target(path):
+def get_gcp_target(model, path):
     """
     Check if the environment variable is set to use GCP.
     """
     if os.getenv("PROXY_TARGET"):
         return os.getenv("PROXY_TARGET")
+    elif model in known_chat_models and "chat/completions" in path:
+        return f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/openapi/chat/completions"
     else:
-        return f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/{path.lstrip('/')}".rstrip("/")
+        return f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/{model}:rawPredict"
 
-def get_header(request, path):
-    if "chat/completions" in path:
-        path = path.replace("chat/completions", "endpoints/openapi/chat/completions")
-
+def get_header(model, request, path):
     path_no_prefix = f"/{path.lstrip('/')}".removeprefix(API_ROUTE_PREFIX)
-    target_url = get_gcp_target(path_no_prefix)
+    target_url = get_gcp_target(model, path_no_prefix)
 
     # remove hop-by-hop headers
     headers = {
@@ -80,32 +99,42 @@ def get_header(request, path):
     headers["Authorization"] = f"Bearer {access_token}"
     return target_url,headers
 
-def to_vertex_contents(openai_messages):
-    """
-    Convert OpenAI-style chat messages to Anthropic `contents` format for Vertex AI.
-    """
-    anthropic_contents = []
+def to_vertex_anthropic(openai_messages):
+    message = [
+        {
+            "role": m["role"],
+            "content": [{"type": "text", "text": m["content"]}]
+        }
+        for m in openai_messages["messages"]
+    ]
 
-    for msg in openai_messages:
-        # Skip empty messages
-        if not msg.get("content"):
-            continue
+    return {
+        "anthropic_version": "vertex-2023-10-16",
+        "max_tokens": 256,
+        "messages": message
+    }
 
-        role = msg["role"]
-        if role == "system":
-            # System messages can be treated as a user message prefixing the context
-            anthropic_contents.append({
-                "role": "user",
-                "parts": [{"text": f"[System instruction]: {msg['content']}"}]
-            })
-        else:
-            anthropic_contents.append({
-                "role": role,
-                "parts": [{"text": msg["content"]}]
-            })
-
-    return anthropic_contents
-
+def from_vertex_anthropic_to_openai(msg):
+    msg_json = json.loads(msg)
+    return json.dumps({
+        "id": msg_json["id"],
+        "object": "chat.completion",
+        "model": msg_json.get("model", "claude"),
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": msg_json["role"],
+                    "content": "".join(
+                        part["text"] for part in msg_json["content"]
+                        if part["type"] == "text"
+                    )
+                },
+                "finish_reason": msg_json.get("stop_reason", "stop")
+            }
+        ],
+        "usage": msg_json.get("usage", {})
+    })
 
 def to_openai_response(resp):
     """
@@ -135,42 +164,46 @@ def to_openai_response(resp):
     }
 
 async def handle_proxy(request: Request, path: str):
-    # Build safe target URL
-    target_url, headers = get_header(request, path)
 
     try:
         content = await request.body()
+        content_json = json.loads(content)
 
         if USE_MODEL_MAPPING:
-            data = json.loads(content)
-            if "model" in data:
-                request_model = data.get("model", None)
+            if "model" in content_json:
+                request_model = content_json.get("model", None)
                 model = get_model("gcp", request_model)
+                model_name = model
 
                 if model != None and model != request_model and "publishers/google/" in model:
-                    model = f"google/{model.split('/')[-1]}"
+                    model_name = f"google/{model.split('/')[-1]}"
 
-                data["model"]= model
-            content = json.dumps(data)
+                content_json["model"]= model_name
 
         needs_conversion = False
-        if "messages" in content:
+        if not model in known_chat_models:
             needs_conversion = True
             # openai messages to vertex contents 
-            content = to_vertex_contents(content)
+            if "anthropic" in model:
+                content_json = to_vertex_anthropic(content_json)
 
+        # Build safe target URL
+        target_url, headers = get_header(model, request, path)
         async with httpx.AsyncClient() as client:
             response = await client.request(
                 method=request.method,
                 url=target_url,
                 headers=headers,
-                content=content,
+                content=json.dumps(content_json),
                 params=request.query_params,
                 timeout=30.0,
             )
+
+        content = response.content
         if needs_conversion:
             # convert vertex response to openai format
-            response = to_openai_response(response.json())
+            if "anthropic" in model:
+                content = from_vertex_anthropic_to_openai(response.content)
 
     except httpx.RequestError as e:
         logging.error(f"Proxy request failed: {e}")
@@ -183,7 +216,7 @@ async def handle_proxy(request: Request, path: str):
     }
 
     return Response(
-        content=response.content,
+        content=content,
         status_code=response.status_code,
         headers=response_headers,
         media_type=response.headers.get("content-type", "application/octet-stream"),
