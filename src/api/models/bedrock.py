@@ -154,6 +154,7 @@ class BedrockModel(BaseChatModel):
                 f"Unsupported model '{chat_request.model}'. "
                 f"list of known models: {bedrock_model_list.keys()}"
             )
+            logger.error(error)
 
         if error:
             raise HTTPException(
