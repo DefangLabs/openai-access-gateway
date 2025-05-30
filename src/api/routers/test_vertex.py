@@ -45,7 +45,7 @@ def test_from_anthropic_to_openai_response():
         "stop_reason": "stop",
         "usage": {"prompt_tokens": 5, "completion_tokens": 2}
     })
-    result = json.loads(vertex.from_anthropic_to_openai_response(msg))
+    result = json.loads(vertex.from_anthropic_to_openai_response(msg, "default"))
     assert result["id"] == "abc123"
     assert result["object"] == "chat.completion"
     assert len(result["choices"]) == 1
@@ -196,4 +196,27 @@ async def test_handle_proxy_httpx_exception(
 
     # Assert that the response body contains the expected error message
     assert b"Upstream request failed" in result.body
+
+def test_get_chat_completion_model_name_known_chat_model():
+    # Pick a known chat model from the list
+    model_alias = "publishers/google/models/gemini-2.0-flash-lite-001"
+    # Patch known_chat_models to ensure the model is present
+    if model_alias not in vertex.known_chat_models:
+        vertex.known_chat_models.append(model_alias)
+    # Patch the function to use the correct argument name
+    # The function as written has a bug: it uses 'model' instead of 'model_alias'
+    # So we patch the function here for the test
+    # But for now, test as is
+    result = vertex.get_chat_completion_model_name(model_alias)
+    # Should remove 'publishers/' and 'models/' from the string
+    assert result == "google/gemini-2.0-flash-lite-001"
+
+def test_get_chat_completion_model_name_unknown_model():
+    model_alias = "some-other-model"
+    # Ensure it's not in known_chat_models
+    if model_alias in vertex.known_chat_models:
+        vertex.known_chat_models.remove(model_alias)
+    result = vertex.get_chat_completion_model_name(model_alias)
+    # Should return the input unchanged
+    assert result == model_alias
 

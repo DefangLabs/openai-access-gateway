@@ -79,7 +79,7 @@ def get_proxy_target(model, path):
     """
     if os.getenv("PROXY_TARGET"):
         return os.getenv("PROXY_TARGET")
-    elif model in known_chat_models and path.endswith("/chat/completions")
+    elif model in known_chat_models and path.endswith("/chat/completions"):
         return f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/openapi/chat/completions"
     else:
         return f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/{model}:rawPredict"
@@ -114,12 +114,12 @@ def to_vertex_anthropic(openai_messages):
         "messages": message
     }
 
-def from_anthropic_to_openai_response(msg):
+def from_anthropic_to_openai_response(msg, model):
     msg_json = json.loads(msg)
     return json.dumps({
         "id": msg_json["id"],
         "object": "chat.completion",
-        "model": msg_json.get("model", "claude"),
+        "model": model,
         "choices": [
             {
                 "index": 0,
@@ -136,21 +136,23 @@ def from_anthropic_to_openai_response(msg):
         "usage": msg_json.get("usage", {})
     })
 
+def get_chat_completion_model_name(model_alias):
+    if model_alias in known_chat_models:
+        # publishers/google/models/gemini-2.0-flash-lite-001 -> "google/gemini-2.0-flash-lite-001"
+        model_alias = model_alias.replace("publishers/", "").replace("models/", "")
+
+    return model_alias
+
 async def handle_proxy(request: Request, path: str):
     try:
         content = await request.body()
         content_json = json.loads(content)
+        model_alias = content_json.get("model", "default")
+        model = get_model("gcp", model_alias)
 
         if USE_MODEL_MAPPING:
             if "model" in content_json:
-                request_model = content_json.get("model", None)
-                model = get_model("gcp", request_model)
-                model_name = model
-
-                if model != None and model != request_model and "publishers/google/" in model:
-                    model_name = f"google/{model.split('/')[-1]}"
-
-                content_json["model"]= model_name
+                content_json["model"]= get_chat_completion_model_name(model)
 
         needs_conversion = False
         if not model in known_chat_models:
@@ -175,7 +177,7 @@ async def handle_proxy(request: Request, path: str):
         if needs_conversion:
             # convert vertex response to openai format
             if "anthropic" in model:
-                content = from_anthropic_to_openai_response(response.content)
+                content = from_anthropic_to_openai_response(response.content, model_alias)
 
     except httpx.RequestError as e:
         logging.error(f"Proxy request failed: {e}")
