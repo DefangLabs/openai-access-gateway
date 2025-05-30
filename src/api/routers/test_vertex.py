@@ -53,23 +53,23 @@ def test_from_anthropic_to_openai_response():
     assert result["choices"][0]["finish_reason"] == "stop"
     assert result["usage"]["prompt_tokens"] == 5
 
-def test_get_gcp_target_env(monkeypatch):
+def test_get_proxy_target_env(monkeypatch):
     monkeypatch.setenv("PROXY_TARGET", "https://custom-proxy")
-    result = vertex.get_gcp_target("any-model", "/v1/chat/completions")
+    result = vertex.get_proxy_target("any-model", "/v1/chat/completions")
     assert result == "https://custom-proxy"
 
-def test_get_gcp_target_known_chat(monkeypatch):
+def test_get_proxy_target_known_chat(monkeypatch):
     monkeypatch.delenv("PROXY_TARGET", raising=False)
     model = vertex.known_chat_models[0]
     path = "/v1/chat/completions"
-    result = vertex.get_gcp_target(model, path)
+    result = vertex.get_proxy_target(model, path)
     assert "endpoints/openapi/chat/completions" in result
 
-def test_get_gcp_target_raw_predict(monkeypatch):
+def test_get_proxy_target_raw_predict(monkeypatch):
     monkeypatch.delenv("PROXY_TARGET", raising=False)
     model = "unknown-model"
     path = "/v1/other"
-    result = vertex.get_gcp_target(model, path)
+    result = vertex.get_proxy_target(model, path)
     assert ":rawPredict" in result
 
 @patch("api.routers.vertex.get_access_token", return_value="dummy-token")
@@ -84,7 +84,7 @@ def test_get_header_removes_hop_headers(mock_token, dummy_request):
     })
     model = "test-model"
     path = "/v1/chat/completions"
-    with patch("api.routers.vertex.get_gcp_target", return_value="http://target"):
+    with patch("api.routers.vertex.get_proxy_target", return_value="http://target"):
         target_url, headers = vertex.get_header(model, req, path)
     assert target_url == "http://target"
     assert "Host" not in headers

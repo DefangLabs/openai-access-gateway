@@ -73,20 +73,20 @@ def get_access_token():
     credentials.refresh(auth_request)
     return credentials.token
 
-def get_gcp_target(model, path):
+def get_proxy_target(model, path):
     """
     Check if the environment variable is set to use GCP.
     """
     if os.getenv("PROXY_TARGET"):
         return os.getenv("PROXY_TARGET")
-    elif model in known_chat_models and "chat/completions" in path:
+    elif model in known_chat_models and path.endswith("/chat/completions")
         return f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/openapi/chat/completions"
     else:
         return f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/{model}:rawPredict"
 
 def get_header(model, request, path):
     path_no_prefix = f"/{path.lstrip('/')}".removeprefix(API_ROUTE_PREFIX)
-    target_url = get_gcp_target(model, path_no_prefix)
+    target_url = get_proxy_target(model, path_no_prefix)
 
     # remove hop-by-hop headers
     headers = {
@@ -168,7 +168,7 @@ async def handle_proxy(request: Request, path: str):
                 headers=headers,
                 content=json.dumps(content_json),
                 params=request.query_params,
-                timeout=30.0,
+                timeout=5.0,
             )
 
         content = response.content
