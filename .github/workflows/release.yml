@@ -8,29 +8,21 @@ permissions:
 
 jobs:
   make-images:
+    name: Make Docker Images and Push To Registry
     if: github.ref == 'refs/heads/defang'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+        with:
+          ref: defang
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v3
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
-
-      - name: Authenticate with Google Artifact Registry
-        run: |
-          echo "${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}" > gcp-key.json
-          gcloud auth activate-service-account --key-file=gcp-key.json
-          gcloud auth configure-docker us-docker.pkg.dev --quiet
-
-      - name: Push Docker images to AWS + GCP
+      - name: Login to Docker Hub
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+      - name: Push Docker images
         run: make push
   on-failure:
     runs-on: ubuntu-latest
