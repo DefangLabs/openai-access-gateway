@@ -151,12 +151,12 @@ async def handle_proxy(request: Request, path: str):
             if "model" in content_json:
                 content_json["model"]= get_chat_completion_model_name(model)
 
-        needs_conversion = False
+        conversion_target = None
         if not model in known_chat_models:
-            needs_conversion = True
             # openai messages to vertex contents 
             if "anthropic" in model:
                 content_json = to_vertex_anthropic(content_json)
+                conversion_target = "anthropic"
 
         # Build safe target URL
         target_url, headers = get_header(model, request, path)
@@ -171,10 +171,9 @@ async def handle_proxy(request: Request, path: str):
             )
 
         content = response.content
-        if needs_conversion:
+        if conversion_target == "anthropic":
             # convert vertex response to openai format
-            if "anthropic" in model:
-                content = from_anthropic_to_openai_response(response.content, model_alias)
+            content = from_anthropic_to_openai_response(response.content, model_alias)
 
     except httpx.RequestError as e:
         logging.error(f"Proxy request failed: {e}")
