@@ -135,8 +135,10 @@ def from_anthropic_to_openai_response(msg, model):
     })
 
 def get_chat_completion_model_name(model_alias):
-    # publishers/google/models/gemini-2.0-flash-lite-001 -> "gemini-2.0-flash-lite-001"
-    return model_alias.split("/")[-1]
+    if model_alias.startswith("publishers/google/"):
+        return f"google/{model_alias.split('/')[-1]}"
+
+    return model_alias.split('/')[-1]
 
 async def handle_proxy(request: Request, path: str):
     try:
