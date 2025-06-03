@@ -14,8 +14,6 @@ from google.auth.transport.requests import Request as AuthRequest
 from api.modelmapper import get_model
 
 known_chat_models = [
-    "publishers/meta-llama/models/llama-3-1-8b-instruct",
-    "publishers/meta-llama/models/llama-3-8b-instruct",
     "publishers/mistral-ai/models/mistral-7b-instruct-v0.3",
     "publishers/mistral-ai/models/mistral-nemo-instruct-2407",
     "publishers/mistral-ai/models/mistral-nemo@2407",

@@ -13,7 +13,7 @@ def load_model_map():
 
 def get_model(provider, model):
     provider = provider.lower()
-    model = model.lower()
+    model = model.lower().removesuffix(":latest")
 
     available_models = _model_map.get(provider, {})
     return available_models.get(model, model)

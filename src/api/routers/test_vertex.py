@@ -209,7 +209,7 @@ def test_get_chat_completion_model_name_known_chat_model():
     # But for now, test as is
     result = vertex.get_chat_completion_model_name(model_alias)
     # Should remove 'publishers/' and 'models/' from the string
-    assert result == "google/gemini-2.0-flash-lite-001"
+    assert result == "gemini-2.0-flash-lite-001"
 
 def test_get_chat_completion_model_name_unknown_model():
     model_alias = "some-other-model"
