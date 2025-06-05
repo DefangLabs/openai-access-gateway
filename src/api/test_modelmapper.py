@@ -5,7 +5,6 @@ from api.modelmapper import get_model, load_model_map
 @patch("api.modelmapper._model_map", {
     "provider1": {
         "model1": "mapped_model1",
-        "model1:latest": "mapped_model1",
         "model2": "mapped_model2"
     }
 })
