@@ -82,7 +82,7 @@ def get_proxy_target(model, path):
     else:
         return f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/{model}:rawPredict"
 
-def get_header(model, request, path):
+def get_headers(model, request, path):
     path_no_prefix = f"/{path.lstrip('/')}".removeprefix(API_ROUTE_PREFIX)
     target_url = get_proxy_target(model, path_no_prefix)
 
@@ -159,12 +159,12 @@ async def handle_proxy(request: Request, path: str):
                 conversion_target = "anthropic"
 
         # Build safe target URL
-        target_url, headers = get_header(model, request, path)
+        target_url, request_headers = get_headers(model, request, path)
         async with httpx.AsyncClient() as client:
             response = await client.request(
                 method=request.method,
                 url=target_url,
-                headers=headers,
+                headers=request_headers,
                 content=json.dumps(content_json),
                 params=request.query_params,
                 timeout=5.0,
