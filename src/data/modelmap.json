@@ -29,6 +29,7 @@
     "nova-micro": "us.amazon.nova-micro-v1:0",
     "nova-premier-v1": "amazon.nova-premier-v1:0",
     "nova-pro": "us.amazon.nova-pro-v1:0",
+    "embedding-default": "amazon.titan-embed-text-v2:0",
     "default": "us.amazon.nova-micro-v1:0"
   },
   "gcp": {

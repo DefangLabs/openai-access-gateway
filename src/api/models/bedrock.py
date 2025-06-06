@@ -39,6 +39,7 @@ from api.schema import (
     UserMessage,
 )
 from api.setting import AWS_REGION, DEBUG, DEFAULT_MODEL, ENABLE_CROSS_REGION_INFERENCE
+from modelmapper import get_model
 
 logger = logging.getLogger(__name__)
 
@@ -868,6 +869,7 @@ class TitanEmbeddingsModel(BedrockEmbeddingsModel):
 
 
 def get_embeddings_model(model_id: str) -> BedrockEmbeddingsModel:
+    model_id = get_model("aws", model_id)
     model_name = SUPPORTED_BEDROCK_EMBEDDING_MODELS.get(model_id, "")
     if DEBUG:
         logger.info("model name is " + model_name)
