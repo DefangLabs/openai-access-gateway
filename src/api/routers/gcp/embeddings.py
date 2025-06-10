@@ -61,6 +61,11 @@ def to_openai_response(embedding_content, model):
     """
     Convert Vertex AI embeddings response to OpenAI format.
     """
+    total_tokens = sum(
+        item["embeddings"]["statistics"]["token_count"]
+        for item in embedding_content.get("predictions", [])
+    )
+
     return {
         "data": [
             {
@@ -70,7 +75,10 @@ def to_openai_response(embedding_content, model):
             } for idx, item in enumerate(embedding_content.get("predictions", []))
         ],
         "model": model,
-        "object": "list"
+        "object": "list",
+        "usage": {
+            "total_tokens": total_tokens,
+        }
     }
 
 @router.post("/{path:path}", response_model=EmbeddingsResponse)
