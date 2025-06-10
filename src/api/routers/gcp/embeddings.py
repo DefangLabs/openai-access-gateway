@@ -43,17 +43,35 @@ def to_vertex_embeddings(request):
     """
     Convert OpenAI-style embeddings request to Vertex AI format.
     """
-    vertex_request = {}
+    vertex_request = {
+        "instances": []
+    }
 
     msg_input = request.get("input")
     if type(msg_input) is str:
         vertex_request["instances"] = [{
             "content": f"{msg_input}"
             }]
-    else:
+    elif type(msg_input) is list:
         vertex_request["instances"] = [{"content": f"{str(item)}"} for item in msg_input]
 
     return vertex_request
+
+def to_openai_response(embedding_content, model):
+    """
+    Convert Vertex AI embeddings response to OpenAI format.
+    """
+    return {
+        "data": [
+            {
+                "embedding": item["embeddings"]["values"],
+                "index": idx,
+                "object": "embedding",
+            } for idx, item in enumerate(embedding_content.get("predictions", []))
+        ],
+        "model": model,
+        "object": "list"
+    }
 
 @router.post("/{path:path}", response_model=EmbeddingsResponse)
 async def handle_proxy(request: Request, path: str):
@@ -76,7 +94,7 @@ async def handle_proxy(request: Request, path: str):
                 timeout=5.0,
             )
 
-        content = response.content
+        content = to_openai_response(json.loads(response.content), model_alias)
 
     except httpx.RequestError as e:
         logging.error(f"Proxy request failed: {e}")
@@ -89,7 +107,7 @@ async def handle_proxy(request: Request, path: str):
     }
 
     return Response(
-        content=content,
+        content=json.dumps(content),
         status_code=response.status_code,
         headers=response_headers,
         media_type=response.headers.get("content-type", "application/octet-stream"),
