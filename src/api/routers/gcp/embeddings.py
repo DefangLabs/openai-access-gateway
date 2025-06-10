@@ -3,13 +3,10 @@ import json
 import logging
 import os
 
-from fastapi import APIRouter, Body, Depends, Request, Response
-from contextlib import asynccontextmanager
+from fastapi import APIRouter, Depends, Request, Response
 from api.auth import api_key_auth
-from api.schema import EmbeddingsResponse
+from api.schema import EmbeddingsRequest, EmbeddingsResponse
 from api.setting import API_ROUTE_PREFIX
-from google.auth import default
-from google.auth.transport.requests import Request as AuthRequest
 
 from api.modelmapper import get_model
 from api.gcp.credentials.metadata import get_access_token, project_id, location
@@ -24,7 +21,7 @@ def get_proxy_target(model, path):
     """
     if os.getenv("PROXY_TARGET"):
         return os.getenv("PROXY_TARGET")
-    elif path.endswith("/embeddings"):
+    else:
         return f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/{model}:predict"
 
 def get_header(model, request, path):
@@ -42,22 +39,39 @@ def get_header(model, request, path):
     headers["Authorization"] = f"Bearer {access_token}"
     return target_url, headers
 
-@router.post("", response_model=EmbeddingsResponse)
+def to_vertex_embeddings(request):
+    """
+    Convert OpenAI-style embeddings request to Vertex AI format.
+    """
+    vertex_request = {}
+
+    msg_input = request.get("input")
+    if type(msg_input) is str:
+        vertex_request["instances"] = [{
+            "content": f"{msg_input}"
+            }]
+    else:
+        vertex_request["instances"] = [{"content": f"{str(item)}"} for item in msg_input]
+
+    return vertex_request
+
+@router.post("/{path:path}", response_model=EmbeddingsResponse)
 async def handle_proxy(request: Request, path: str):
     try:
         content = await request.body()
         content_json = json.loads(content)
-        model_alias = content_json.get("model", "default")
+        model_alias = content_json.get("model", "embedding-default")
         model = get_model("gcp", model_alias)
 
         # Build safe target URL
         target_url, request_headers = get_header(model, request, path)
+        vertex_embedding_content = to_vertex_embeddings(content_json)
         async with httpx.AsyncClient() as client:
             response = await client.request(
                 method=request.method,
                 url=target_url,
                 headers=request_headers,
-                content=json.dumps(content_json),
+                content=json.dumps(vertex_embedding_content),
                 params=request.query_params,
                 timeout=5.0,
             )

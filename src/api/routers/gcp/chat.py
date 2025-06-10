@@ -32,7 +32,7 @@ known_chat_models = [
 ]
 
 router = APIRouter(
-    prefix="/embeddings",
+    prefix="/chat",
     dependencies=[Depends(api_key_auth)],
 )
 
