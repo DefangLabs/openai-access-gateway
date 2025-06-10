@@ -10,7 +10,7 @@ from mangum import Mangum
 
 from api.setting import API_ROUTE_PREFIX, DESCRIPTION, SUMMARY, PROVIDER, TITLE, USE_MODEL_MAPPING, VERSION
 from api.modelmapper import load_model_map
-from api.routers.vertex import handle_proxy
+from api.routers.gcp.chat import handle_proxy
 
 def is_aws():
     env = os.getenv("AWS_EXECUTION_ENV")
@@ -54,10 +54,10 @@ app.add_middleware(
 )
 
 if provider != "aws":
+    from api.routers.gcp import chat, embeddings
     logging.info(f"Proxy target set to: GCP")
-    @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"])
-    async def proxy(request: Request, path: str):
-        return await handle_proxy(request, path)
+    app.include_router(chat.router, prefix=API_ROUTE_PREFIX)
+    app.include_router(embeddings.router, prefix=API_ROUTE_PREFIX)
 else:
     from api.routers import chat, embeddings, model
     logging.info("No proxy target set. Using internal routers.")

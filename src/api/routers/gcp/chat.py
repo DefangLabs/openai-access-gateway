@@ -2,16 +2,17 @@ import httpx
 import json
 import logging
 import os
-import requests
-import uuid
 
-from fastapi import Request, Response
+from fastapi import APIRouter, Depends, Request, Response
 from contextlib import asynccontextmanager
 from api.setting import API_ROUTE_PREFIX, GCP_PROJECT_ID, GCP_REGION, USE_MODEL_MAPPING
 from google.auth import default
 from google.auth.transport.requests import Request as AuthRequest
 
+from api.auth import api_key_auth
 from api.modelmapper import get_model
+from api.gcp.credentials.metadata import get_access_token, project_id, location
+from api.schema import ChatResponse, ChatStreamResponse, Error
 
 known_chat_models = [
     "publishers/mistral-ai/models/mistral-7b-instruct-v0.3",
@@ -30,46 +31,10 @@ known_chat_models = [
     "publishers/meta/models/llama2-7b",
 ]
 
-
-# GCP credentials and project details
-credentials = None
-project_id = None
-location = None
-
-def get_gcp_project_details():
-    from google.auth import default
-
-    # Try metadata server for region
-    credentials = None
-    project_id = GCP_PROJECT_ID
-    location = GCP_REGION
-
-    try:
-        credentials, project = default()
-        if not project_id:
-            project_id = project
-
-        if not location:
-            zone = requests.get(
-                "http://metadata.google.internal/computeMetadata/v1/instance/zone",
-                headers={"Metadata-Flavor": "Google"},
-                timeout=1
-            ).text
-            location = zone.split("/")[-1].rsplit("-", 1)[0]
-
-    except Exception:
-        logging.warning(f"Error: Failed to get project and location from metadata server. Using local settings.")
-
-    return credentials, project_id, location
-
-credentials, project_id, location = get_gcp_project_details()
-
-# Utility: get service account access token
-def get_access_token():
-    credentials, _ = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
-    auth_request = AuthRequest()
-    credentials.refresh(auth_request)
-    return credentials.token
+router = APIRouter(
+    prefix="/embeddings",
+    dependencies=[Depends(api_key_auth)],
+)
 
 def get_proxy_target(model, path):
     """
@@ -82,7 +47,7 @@ def get_proxy_target(model, path):
     else:
         return f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/{model}:rawPredict"
 
-def get_headers(model, request, path):
+def get_header(model, request, path):
     path_no_prefix = f"/{path.lstrip('/')}".removeprefix(API_ROUTE_PREFIX)
     target_url = get_proxy_target(model, path_no_prefix)
 
@@ -140,6 +105,9 @@ def get_chat_completion_model_name(model_alias):
 
     return model_alias.split('/')[-1]
 
+@router.post(
+    "/completions", response_model=ChatResponse | ChatStreamResponse | Error, response_model_exclude_unset=True
+)
 async def handle_proxy(request: Request, path: str):
     try:
         content = await request.body()
@@ -159,7 +127,7 @@ async def handle_proxy(request: Request, path: str):
                 conversion_target = "anthropic"
 
         # Build safe target URL
-        target_url, request_headers = get_headers(model, request, path)
+        target_url, request_headers = get_header(model, request, path)
         async with httpx.AsyncClient() as client:
             response = await client.request(
                 method=request.method,
