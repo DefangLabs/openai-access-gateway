@@ -29,3 +29,7 @@ push: no-diff login
 .PHONY: login
 login: ## Login to docker
 	@docker login
+
+.PHONY: tests
+tests:
+	PYTHONPATH=src pytest
