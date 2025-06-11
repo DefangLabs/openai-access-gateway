@@ -5,7 +5,7 @@ import os
 
 from fastapi import APIRouter, Depends, Request, Response
 from api.auth import api_key_auth
-from api.schema import EmbeddingsRequest, EmbeddingsResponse
+from api.schema import EmbeddingsResponse
 from api.setting import API_ROUTE_PREFIX
 
 from api.modelmapper import get_model
@@ -77,7 +77,7 @@ def to_openai_response(embedding_content, model):
         "model": model,
         "object": "list",
         "usage": {
-            "total_tokens": total_tokens,
+            "total_tokens": total_tokens
         }
     }
 
