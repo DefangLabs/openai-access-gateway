@@ -29,6 +29,8 @@
     "nova-micro": "us.amazon.nova-micro-v1:0",
     "nova-premier-v1": "amazon.nova-premier-v1:0",
     "nova-pro": "us.amazon.nova-pro-v1:0",
+    "embedding-default": "amazon.titan-embed-text-v2:0",
+    "chat-default": "us.amazon.nova-micro-v1:0",
     "default": "us.amazon.nova-micro-v1:0"
   },
   "gcp": {
@@ -61,6 +63,8 @@
     "gemini-2.0-flash-lite": "publishers/google/models/gemini-2.0-flash-lite-001",
     "gemini-2.5-flash": "publishers/google/models/gemini-2.5-flash-preview-05-20",
     "gemini-2.5-pro": "publishers/google/models/gemini-2.5-pro-preview-05-06",
+    "chat-default": "publishers/google/models/gemini-2.0-flash-lite-001",
+    "embedding-default": "publishers/google/models/text-embedding-005",
     "default": "publishers/google/models/gemini-2.0-flash-lite-001"
   }
 }
