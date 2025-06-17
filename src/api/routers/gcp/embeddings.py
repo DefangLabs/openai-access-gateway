@@ -43,19 +43,12 @@ def to_vertex_embeddings(request):
     """
     Convert OpenAI-style embeddings request to Vertex AI format.
     """
-    vertex_request = {
-        "instances": []
+    inputs = request.get("input", [])
+    if not isinstance(inputs, list):
+        inputs = [inputs]
+    return {
+        "instances": [{"content": str(content)} for content in inputs]
     }
-
-    msg_input = request.get("input")
-    if type(msg_input) is str:
-        vertex_request["instances"] = [{
-            "content": f"{msg_input}"
-            }]
-    elif type(msg_input) is list:
-        vertex_request["instances"] = [{"content": f"{str(item)}"} for item in msg_input]
-
-    return vertex_request
 
 def to_openai_response(embedding_content, model):
     """
