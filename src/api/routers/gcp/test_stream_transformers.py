@@ -1,0 +1,103 @@
+import pytest
+import json
+import re
+import asyncio
+
+from stream_transformers import (
+    openai_chunk,
+    openai_done,
+    generate_openai_id,
+    transform_claude,
+    handle_data_line,
+)
+
+def test_openai_chunk():
+    payload = '{"foo": "bar"}'
+    assert openai_chunk(payload) == f"data: {payload}\n\n"
+
+def test_generate_openai_id():
+    id1 = generate_openai_id()
+    assert id1.startswith("chatcmpl-ts")
+    assert re.match(r"chatcmpl-ts\d{13}", id1)
+
+@pytest.mark.asyncio
+async def test_transform_claude_content_block_delta():
+    data = {
+        "type": "content_block_delta",
+        "delta": {"text": "Hello!"},
+    }
+    gen = transform_claude(data)
+    chunk = await anext(gen)
+    obj = json.loads(chunk[len("data: "):-2])
+    assert obj["object"] == "chat.completion.chunk"
+    assert obj["choices"][0]["delta"]["content"] == "Hello!"
+    with pytest.raises(StopAsyncIteration):
+        await anext(gen)
+
+@pytest.mark.asyncio
+async def test_transform_claude_message_delta_with_stop_reason():
+    data = {
+        "type": "message_delta",
+        "delta": {"stop_reason": "stop"},
+    }
+    gen = transform_claude(data)
+
+    # chunk 1
+    chunk = await anext(gen)
+    obj = json.loads(chunk[len("data: "):-2])
+    assert obj["choices"][0]["finish_reason"] == "stop"
+
+    # chunk 2
+    chunk = await anext(gen)
+    assert chunk == openai_done()
+    with pytest.raises(StopAsyncIteration):
+        await anext(gen)
+
+@pytest.mark.asyncio
+async def test_transform_claude_message_stop():
+    data = {"type": "message_stop"}
+    gen = transform_claude(data)
+    chunk = await anext(gen)
+    assert chunk == openai_done()
+    with pytest.raises(StopAsyncIteration):
+        await anext(gen)
+
+@pytest.mark.asyncio
+async def test_handle_data_line_claude_content_block_delta():
+    data = {
+        "type": "content_block_delta",
+        "delta": {"text": "Hi!"},
+        "model": "claude-2"
+    }
+    raw_json = json.dumps(data)
+    gen = handle_data_line(raw_json, "override-model")
+    chunk = await anext(gen)
+    obj = json.loads(chunk[len("data: "):-2])
+    assert obj["choices"][0]["delta"]["content"] == "Hi!"
+    with pytest.raises(StopAsyncIteration):
+        await anext(gen)
+
+@pytest.mark.asyncio
+async def test_handle_data_line_gemini_or_openai():
+    data = {
+        "id": "abc",
+        "object": "chat.completion",
+        "model": "gpt-3.5-turbo"
+    }
+    raw_json = json.dumps(data)
+    gen = handle_data_line(raw_json, "override-model")
+    chunk = await anext(gen)
+    obj = json.loads(chunk[len("data: "):-2])
+    assert obj["id"] == "abc"
+    assert obj["model"] == "override-model"
+    with pytest.raises(StopAsyncIteration):
+        await anext(gen)
+
+@pytest.mark.asyncio
+async def test_handle_data_line_invalid_json():
+    raw_json = "not a json"
+    gen = handle_data_line(raw_json, "any-model")
+    chunk = await anext(gen)
+    assert chunk == openai_chunk(raw_json)
+    with pytest.raises(StopAsyncIteration):
+        await anext(gen)

@@ -15,7 +15,7 @@ from api.auth import api_key_auth
 from api.modelmapper import get_model
 from api.gcp.credentials.metadata import get_access_token, project_id, location
 from api.schema import ChatResponse, ChatStreamResponse, Error
-from api.routers.gcp.stream_transformers import handle_data_line, openai_done, openai_chunk
+from stream_transformers import handle_data_line, openai_done, openai_chunk
 
 known_chat_models = [
     "publishers/mistral-ai/models/mistral-7b-instruct-v0.3",
