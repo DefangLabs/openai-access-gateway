@@ -154,7 +154,7 @@ async def stream_generator(target_url: str, request_headers: dict, content_json:
                     break
 
                 if line.startswith("data: "):
-                    raw_json = line[6:].strip()
+                    raw_json = line[len("data: "):].strip()
                     async for chunk in handle_data_line(raw_json, model_alias):
                         yield chunk
                 else:
