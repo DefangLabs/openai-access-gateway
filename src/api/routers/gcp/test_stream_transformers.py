@@ -74,6 +74,7 @@ async def test_handle_data_line_claude_content_block_delta():
     chunk = await anext(gen)
     obj = json.loads(chunk[len("data: "):-2])
     assert obj["choices"][0]["delta"]["content"] == "Hi!"
+    assert obj["model"] == "override-model"
     with pytest.raises(StopAsyncIteration):
         await anext(gen)
 
@@ -82,7 +83,7 @@ async def test_handle_data_line_gemini_or_openai():
     data = {
         "id": "abc",
         "object": "chat.completion",
-        "model": "gpt-3.5-turbo"
+        "model": "gemini-2.0",
     }
     raw_json = json.dumps(data)
     gen = handle_data_line(raw_json, "override-model")
