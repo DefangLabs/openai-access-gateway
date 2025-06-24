@@ -3,7 +3,7 @@ import json
 import logging
 import os
 
-from typing import Optional
+from typing import AsyncGenerator
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import StreamingResponse
 from contextlib import asynccontextmanager
@@ -15,7 +15,7 @@ from api.auth import api_key_auth
 from api.modelmapper import get_model
 from api.gcp.credentials.metadata import get_access_token, project_id, location
 from api.schema import ChatResponse, ChatStreamResponse, Error
-from stream_transformers import handle_data_line, openai_done, openai_chunk
+from api.routers.gcp.stream_transformers import handle_data_line, openai_done, openai_chunk
 
 known_chat_models = [
     "publishers/mistral-ai/models/mistral-7b-instruct-v0.3",
@@ -136,6 +136,31 @@ def transform_vertex_chunk_to_openai(chunk_line: str, index: int = 0) -> str:
 
     return f"data: {json.dumps(transformed)}\n"
 
+async def stream_generator(target_url: str, request_headers: dict, content_json: dict, model_alias: str) -> AsyncGenerator[str, None]:
+    async with httpx.AsyncClient(timeout=None) as client:
+        async with client.stream(
+            "POST",
+            target_url,
+            headers=request_headers,
+            json=content_json,
+        ) as response:
+
+            async for line in response.aiter_lines():
+                if not line.strip():
+                    continue
+
+                if line.strip() == "data: [DONE]":
+                    yield openai_done()
+                    break
+
+                if line.startswith("data: "):
+                    raw_json = line[6:].strip()
+                    async for chunk in handle_data_line(raw_json, model_alias):
+                        yield chunk
+                else:
+                    yield openai_chunk(line.strip())
+    yield openai_done()
+
 @router.post(
     "/completions", response_model=ChatResponse | ChatStreamResponse | Error, response_model_exclude_unset=True
 )
@@ -162,32 +187,7 @@ async def handle_proxy(request: Request):
         target_url, request_headers = get_headers(model, request, "chat/completions", is_streaming)
 
         if is_streaming:           
-            async def stream_generator():
-                async with httpx.AsyncClient(timeout=None) as client:
-                    async with client.stream(
-                        "POST",
-                        target_url,
-                        headers=request_headers,
-                        json=content_json,
-                    ) as response:
-
-                        async for line in response.aiter_lines():
-                            if not line.strip():
-                                continue
-
-                            if line.strip() == "data: [DONE]":
-                                yield openai_done()
-                                break
-
-                            if line.startswith("data: "):
-                                raw_json = line[6:].strip()
-                                async for chunk in handle_data_line(raw_json, model_alias):
-                                    yield chunk
-                            else:
-                                yield openai_chunk(line.strip())
-                yield openai_done()
-
-            return StreamingResponse(stream_generator(), media_type="text/event-stream")
+            return StreamingResponse(stream_generator(target_url, request_headers, content_json, model_alias), media_type="text/event-stream")
         else:
             async with httpx.AsyncClient() as client:
                 response = await client.request(

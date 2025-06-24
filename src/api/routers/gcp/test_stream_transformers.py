@@ -74,7 +74,7 @@ async def test_handle_data_line_claude_content_block_delta():
     chunk = await anext(gen)
     obj = json.loads(chunk[len("data: "):-2])
     assert obj["choices"][0]["delta"]["content"] == "Hi!"
-    assert obj["model"] == "override-model"
+    assert "model" not in obj # model should not be in delta blocks
     with pytest.raises(StopAsyncIteration):
         await anext(gen)
 
