@@ -7,7 +7,7 @@ from typing import AsyncGenerator
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import StreamingResponse
 from contextlib import asynccontextmanager
-from api.setting import API_ROUTE_PREFIX, GCP_PROJECT_ID, GCP_REGION, USE_MODEL_MAPPING
+from api.setting import API_ROUTE_PREFIX, USE_MODEL_MAPPING
 from google.auth import default
 from google.auth.transport.requests import Request as AuthRequest
 
