@@ -40,5 +40,5 @@ security = HTTPBearer(auto_error=api_key != "")
 def api_key_auth(
     authorization: Annotated[HTTPAuthorizationCredentials, Depends(security)],
 ):
-    if DEFAULT_API_KEYS != "" and authorization and authorization.credentials != api_key:
+    if api_key and authorization and authorization.credentials != api_key:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API Key")
