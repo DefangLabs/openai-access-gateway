@@ -39,7 +39,7 @@ from api.schema import (
     UserMessage,
 )
 from api.setting import AWS_REGION, DEBUG, DEFAULT_MODEL, ENABLE_CROSS_REGION_INFERENCE
-from modelmapper import get_model
+from api.modelmapper import get_model
 
 logger = logging.getLogger(__name__)
 
