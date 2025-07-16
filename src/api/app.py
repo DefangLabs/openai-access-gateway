@@ -2,7 +2,7 @@ import logging
 import os
 import uvicorn
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
@@ -10,7 +10,6 @@ from mangum import Mangum
 
 from api.setting import API_ROUTE_PREFIX, DESCRIPTION, SUMMARY, PROVIDER, TITLE, USE_MODEL_MAPPING, VERSION
 from api.modelmapper import load_model_map
-from api.routers.gcp.chat import handle_proxy
 
 def is_aws():
     env = os.getenv("AWS_EXECUTION_ENV")
