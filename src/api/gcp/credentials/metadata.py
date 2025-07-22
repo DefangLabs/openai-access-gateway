@@ -4,7 +4,7 @@ import requests
 from google.auth import default
 from google.auth.transport.requests import Request as AuthRequest
 
-from api.setting import GCP_PROJECT_ID, GCP_REGION
+from api.setting import GOOGLE_CLOUD_PROJECT, GCP_REGION
 
 
 # GCP credentials and project details
@@ -17,7 +17,7 @@ def get_gcp_project_details():
 
     # Try metadata server for region
     credentials = None
-    project_id = GCP_PROJECT_ID
+    project_id = GOOGLE_CLOUD_PROJECT
     location = GCP_REGION
 
     try:
