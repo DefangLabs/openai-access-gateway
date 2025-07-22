@@ -38,8 +38,9 @@ config = {
     "version": VERSION,
 }
 
+level = logging.DEBUG if os.getenv("DEBUG", "false").lower() == "true" else logging.INFO
 logging.basicConfig(
-    level=logging.INFO,
+    level=level,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 
