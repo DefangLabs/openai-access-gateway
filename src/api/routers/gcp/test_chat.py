@@ -23,12 +23,14 @@ def dummy_request():
 def test_to_vertex_anthropic():
     openai_messages = {
         "messages": [
+            {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Hello!"},
             {"role": "assistant", "content": "Hi there!"}
         ]
     }
     result = chat.to_vertex_anthropic(openai_messages)
     assert result["anthropic_version"] == "vertex-2023-10-16"
+    assert result["system"] == 'You are a helpful assistant.\n'
     assert result["max_tokens"] == 256
     assert isinstance(result["messages"], list)
     assert result["messages"][0]["role"] == "user"

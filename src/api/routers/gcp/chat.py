@@ -68,18 +68,33 @@ def get_headers(model, request, path, stream):
     headers["Authorization"] = f"Bearer {access_token}"
     return target_url, headers
 
+def _parse_system_prompts(openai_messages) -> str:
+    system_prompts = ""
+    for message in openai_messages:
+        if message["role"] != "system":
+            # ignore system messages here
+            continue
+        assert isinstance(message["content"], str)
+        system_prompts += message["content"] + "\n"
+
+        return system_prompts
+
 def to_vertex_anthropic(openai_messages):
-    message = [
-        {
+    message = []
+    for m in openai_messages["messages"]:
+        if m["role"] == "system":
+            continue
+        message.append({
             "role": m["role"],
             "content": [{"type": "text", "text": m["content"]}]
-        }
-        for m in openai_messages["messages"]
-    ]
+        })
+
+    system_prompts = _parse_system_prompts(openai_messages["messages"])
 
     return {
         "anthropic_version": "vertex-2023-10-16",
         "max_tokens": 256,
+        "system": system_prompts,
         "messages": message
     }
 
@@ -178,7 +193,7 @@ async def handle_proxy(request: Request):
 
         conversion_target = None
         if not model in known_chat_models:
-            # openai messages to vertex contents 
+            # openai messages to vertex contents
             if "anthropic" in model:
                 content_json = to_vertex_anthropic(content_json)
                 conversion_target = "anthropic"
@@ -186,7 +201,7 @@ async def handle_proxy(request: Request):
         # Build safe target URL
         target_url, request_headers = get_headers(model, request, "chat/completions", is_streaming)
 
-        if is_streaming:           
+        if is_streaming:
             return StreamingResponse(stream_generator(target_url, request_headers, content_json, model_alias), media_type="text/event-stream")
         else:
             async with httpx.AsyncClient() as client:
