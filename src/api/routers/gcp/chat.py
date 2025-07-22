@@ -174,10 +174,11 @@ async def stream_generator(target_url: str, request_headers: dict, content_json:
 
                 if line.startswith("data: "):
                     raw_json = line[len("data: "):].strip()
-                    async for chunk in handle_data_line(raw_json, model_alias):
-                        yield chunk
                 else:
-                    yield sse_chunk(line.strip())
+                    raw_json = line.strip()
+                async for chunk in handle_data_line(raw_json, model_alias):
+                    logging.debug(f"Yielding chunk: '{chunk}'")
+                    yield chunk
     yield sse_done()
 
 @router.post(
