@@ -37,6 +37,23 @@ def transform_claude(data: dict):
             ]
         })
 
+    if data["type"] == "message":
+        return json.dumps({
+            "id": generate_openai_id(),
+            "object": "chat.completion",
+            "model": data["model"],
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "content": data["content"][0]["text"]
+                    },
+                    "finish_reason": data.get("stop_reason", "stop")
+                }
+            ],
+            "usage": {}
+        })
+
     logging.warning(f"Unknown data type: {data['type']}")
 
 async def handle_data_line(raw_json: str, model: str) -> AsyncGenerator[str, None]:
