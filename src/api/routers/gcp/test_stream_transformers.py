@@ -4,16 +4,16 @@ import re
 import asyncio
 
 from stream_transformers import (
-    openai_chunk,
-    openai_done,
+    sse_chunk,
+    sse_done,
     generate_openai_id,
     transform_claude,
     handle_data_line,
 )
 
-def test_openai_chunk():
+def test_sse_chunk():
     payload = '{"foo": "bar"}'
-    assert openai_chunk(payload) == f"data: {payload}\n\n"
+    assert sse_chunk(payload) == f"data: {payload}\n\n"
 
 def test_generate_openai_id():
     id1 = generate_openai_id()
@@ -49,7 +49,7 @@ async def test_transform_claude_message_delta_with_stop_reason():
 
     # chunk 2
     chunk = await anext(gen)
-    assert chunk == openai_done()
+    assert chunk == sse_done()
     with pytest.raises(StopAsyncIteration):
         await anext(gen)
 
@@ -58,7 +58,7 @@ async def test_transform_claude_message_stop():
     data = {"type": "message_stop"}
     gen = transform_claude(data)
     chunk = await anext(gen)
-    assert chunk == openai_done()
+    assert chunk == sse_done()
     with pytest.raises(StopAsyncIteration):
         await anext(gen)
 
@@ -99,6 +99,6 @@ async def test_handle_data_line_invalid_json():
     raw_json = "not a json"
     gen = handle_data_line(raw_json, "any-model")
     chunk = await anext(gen)
-    assert chunk == openai_chunk(raw_json)
+    assert chunk == sse_chunk(raw_json)
     with pytest.raises(StopAsyncIteration):
         await anext(gen)

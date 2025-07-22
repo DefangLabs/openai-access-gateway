@@ -2,10 +2,10 @@ import json
 import time
 from typing import AsyncGenerator
 
-def openai_chunk(payload: str) -> str:
+def sse_chunk(payload: str) -> str:
     return f"data: {payload}\n\n"
 
-def openai_done() -> str:
+def sse_done() -> str:
     return "data: [DONE]\n\n"
 
 def generate_openai_id() -> str:
@@ -13,7 +13,7 @@ def generate_openai_id() -> str:
 
 async def transform_claude(data: dict) -> AsyncGenerator[str, None]:
     if data["type"] == "content_block_delta":
-        yield openai_chunk(json.dumps({
+        yield sse_chunk(json.dumps({
             "id": generate_openai_id(),
             "object": "chat.completion.chunk",
             "choices": [
@@ -26,7 +26,7 @@ async def transform_claude(data: dict) -> AsyncGenerator[str, None]:
         }))
 
     elif data["type"] == "message_delta" and "stop_reason" in data["delta"]:
-        yield openai_chunk(json.dumps({
+        yield sse_chunk(json.dumps({
             "choices": [
                 {
                     "delta": {},
@@ -35,10 +35,10 @@ async def transform_claude(data: dict) -> AsyncGenerator[str, None]:
                 }
             ]
         }))
-        yield openai_done()
+        yield sse_done()
 
     elif data["type"] == "message_stop":
-        yield openai_done()
+        yield sse_done()
 
 async def handle_data_line(raw_json: str, model: str) -> AsyncGenerator[str, None]:
     try:
@@ -47,11 +47,11 @@ async def handle_data_line(raw_json: str, model: str) -> AsyncGenerator[str, Non
         if data["model"] != None:
             data["model"] = model
     except json.JSONDecodeError:
-        yield openai_chunk(raw_json)
+        yield sse_chunk(raw_json)
         return
 
     if "type" in data:  # Claude
         async for chunk in transform_claude(data):
             yield chunk
     else:  # Gemini or OpenAI
-        yield openai_chunk(json.dumps(data))
+        yield sse_chunk(json.dumps(data))

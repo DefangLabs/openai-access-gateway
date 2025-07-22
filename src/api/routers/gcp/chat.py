@@ -15,7 +15,7 @@ from api.auth import api_key_auth
 from api.modelmapper import get_model
 from api.gcp.credentials.metadata import get_access_token, project_id, location
 from api.schema import ChatResponse, ChatStreamResponse, Error
-from api.routers.gcp.stream_transformers import handle_data_line, openai_done, openai_chunk
+from api.routers.gcp.stream_transformers import handle_data_line, sse_done, sse_chunk
 
 known_chat_models = [
     "publishers/mistral-ai/models/mistral-7b-instruct-v0.3",
@@ -165,7 +165,7 @@ async def stream_generator(target_url: str, request_headers: dict, content_json:
                     continue
 
                 if line.strip() == "data: [DONE]":
-                    yield openai_done()
+                    yield sse_done()
                     break
 
                 if line.startswith("data: "):
@@ -173,8 +173,8 @@ async def stream_generator(target_url: str, request_headers: dict, content_json:
                     async for chunk in handle_data_line(raw_json, model_alias):
                         yield chunk
                 else:
-                    yield openai_chunk(line.strip())
-    yield openai_done()
+                    yield sse_chunk(line.strip())
+    yield sse_done()
 
 @router.post(
     "/completions", response_model=ChatResponse | ChatStreamResponse | Error, response_model_exclude_unset=True
