@@ -160,7 +160,11 @@ async def stream_generator(target_url: str, request_headers: dict, content_json:
             json=content_json,
         ) as response:
 
+            logging.debug(f"Received response with status code: {response.status_code}")
+            logging.debug(f"Response headers: {response.headers}")
+
             async for line in response.aiter_lines():
+                logging.debug(f"Received line: {line}")
                 if not line.strip():
                     continue
 
@@ -201,6 +205,9 @@ async def handle_proxy(request: Request):
         # Build safe target URL
         target_url, request_headers = get_headers(model, request, "chat/completions", is_streaming)
 
+        logging.debug(f"Proxying request to: {target_url}")
+        logging.debug(f"Request headers: {request_headers}")
+        logging.debug(f"Request content: {content_json}")
         if is_streaming:
             return StreamingResponse(stream_generator(target_url, request_headers, content_json, model_alias), media_type="text/event-stream")
         else:
