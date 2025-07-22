@@ -210,16 +210,16 @@ async def handle_proxy(request: Request):
         logging.debug(f"Request content: {content_json}")
         if is_streaming:
             return StreamingResponse(stream_generator(target_url, request_headers, content_json, model_alias), media_type="text/event-stream")
-        else:
-            async with httpx.AsyncClient() as client:
-                response = await client.request(
-                    method=request.method,
-                    url=target_url,
-                    headers=request_headers,
-                    content=json.dumps(content_json),
-                    params=request.query_params,
-                    timeout=5.0,
-                )
+
+        async with httpx.AsyncClient() as client:
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=request_headers,
+                content=json.dumps(content_json),
+                params=request.query_params,
+                timeout=5.0,
+            )
 
         content = response.content
         if conversion_target == "anthropic":
