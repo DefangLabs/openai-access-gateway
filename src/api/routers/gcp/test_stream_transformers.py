@@ -7,7 +7,6 @@ from stream_transformers import (
     sse_chunk,
     sse_done,
     generate_openai_id,
-    transform_claude,
     handle_data_line,
 )
 
@@ -21,12 +20,12 @@ def test_generate_openai_id():
     assert re.match(r"chatcmpl-ts\d{13}", id1)
 
 @pytest.mark.asyncio
-async def test_transform_claude_content_block_delta():
+async def test_handle_data_line_content_block_delta():
     data = {
         "type": "content_block_delta",
         "delta": {"text": "Hello!"},
     }
-    gen = transform_claude(data)
+    gen = handle_data_line(json.dumps(data), "test-model")
     chunk = await anext(gen)
     obj = json.loads(chunk[len("data: "):-2])
     assert obj["object"] == "chat.completion.chunk"
@@ -35,12 +34,12 @@ async def test_transform_claude_content_block_delta():
         await anext(gen)
 
 @pytest.mark.asyncio
-async def test_transform_claude_message_delta_with_stop_reason():
+async def test_handle_data_line_message_delta_with_stop_reason():
     data = {
         "type": "message_delta",
         "delta": {"stop_reason": "stop"},
     }
-    gen = transform_claude(data)
+    gen = handle_data_line(json.dumps(data), "test-model")
 
     # chunk 1
     chunk = await anext(gen)
@@ -54,9 +53,9 @@ async def test_transform_claude_message_delta_with_stop_reason():
         await anext(gen)
 
 @pytest.mark.asyncio
-async def test_transform_claude_message_stop():
+async def test_handle_data_line_message_stop():
     data = {"type": "message_stop"}
-    gen = transform_claude(data)
+    gen = handle_data_line(json.dumps(data), "test-model")
     chunk = await anext(gen)
     assert chunk == sse_done()
     with pytest.raises(StopAsyncIteration):
