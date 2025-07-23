@@ -80,7 +80,7 @@ async def handle_proxy(request: Request, path: str):
         content = await request.body()
         content_json = json.loads(content)
         model_alias = content_json.get("model", "embedding-default")
-        model = get_model("gcp", model_alias)
+        model = get_model("gcp", model_alias, "embedding-default")
 
         # Build safe target URL
         target_url, request_headers = get_header(model, request, path)

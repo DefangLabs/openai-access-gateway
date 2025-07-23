@@ -1,10 +1,4 @@
-import pytest
 from api.routers.gcp.embeddings import to_vertex_embeddings
-import json
-from unittest.mock import patch, AsyncMock, MagicMock
-import httpx
-from fastapi import Response, Request
-from starlette.datastructures import Headers, QueryParams
 from api.routers.gcp.embeddings import to_openai_response
 
 def test_to_vertex_embeddings_with_string_input():

@@ -24,7 +24,7 @@ known_chat_models = [
     "publishers/mistral-ai/models/mistral-7b-instruct@v0.3",
     "publishers/google/models/gemma-2-27b-it",
     "publishers/google/models/gemma-2-9b-it",
-    "publishers/google/models/gemma-2b"
+    "publishers/google/models/gemma-2b",
     "publishers/google/models/gemini-2.0-flash-001",
     "publishers/google/models/gemini-2.0-flash-lite-001",
     "publishers/google/models/gemini-2.5-pro-preview-05-06",
@@ -189,15 +189,14 @@ async def handle_proxy(request: Request):
         content = await request.body()
         content_json = json.loads(content)
         is_streaming = content_json.get("stream", False)
-        model_alias = content_json.get("model", "default")
-        model = get_model("gcp", model_alias)
+        model_alias = content_json.get("model", "chat-default")
+        model = get_model("gcp", model_alias, "chat-default")
 
         if USE_MODEL_MAPPING:
-            if "model" in content_json:
-                content_json["model"] = get_chat_completion_model_name(model)
+            content_json["model"] = get_chat_completion_model_name(model)
 
         conversion_target = None
-        if not model in known_chat_models:
+        if model not in known_chat_models:
             # openai messages to vertex contents
             if "anthropic" in model:
                 content_json = to_vertex_anthropic(content_json)

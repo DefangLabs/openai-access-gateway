@@ -3,8 +3,6 @@ from typing import Iterable, Literal
 
 from pydantic import BaseModel, Field
 
-from api.setting import DEFAULT_MODEL
-
 
 class Model(BaseModel):
     id: str
@@ -87,7 +85,7 @@ class StreamOptions(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[SystemMessage | UserMessage | AssistantMessage | ToolMessage]
-    model: str = DEFAULT_MODEL
+    model: str | None = None
     frequency_penalty: float | None = Field(default=0.0, le=2.0, ge=-2.0)  # Not used
     presence_penalty: float | None = Field(default=0.0, le=2.0, ge=-2.0)  # Not used
     stream: bool | None = False
@@ -154,7 +152,7 @@ class ChatStreamResponse(BaseChatResponse):
 
 class EmbeddingsRequest(BaseModel):
     input: str | list[str] | Iterable[int | Iterable[int]]
-    model: str
+    model: str | None = None
     encoding_format: Literal["float", "base64"] = "float"
     dimensions: int | None = None  # not used.
     user: str | None = None  # not used.
@@ -174,7 +172,7 @@ class EmbeddingsUsage(BaseModel):
 class EmbeddingsResponse(BaseModel):
     object: Literal["list"] = "list"
     data: list[Embedding]
-    model: str
+    model: str | None = None
     usage: EmbeddingsUsage
 
 

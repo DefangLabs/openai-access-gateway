@@ -28,9 +28,9 @@ async def embeddings(
         ),
     ],
 ):
-    if embeddings_request.model.lower().startswith("text-embedding-"):
+    if embeddings_request.model != None and embeddings_request.model.lower().startswith("text-embedding-"):
         embeddings_request.model = DEFAULT_EMBEDDING_MODEL
     # Exception will be raised if model not supported.
-    embeddings_request.model = get_model("aws", embeddings_request.model)
+    embeddings_request.model = get_model("aws", embeddings_request.model, "embedding-default")
     model = get_embeddings_model(embeddings_request.model)
     return model.embed(embeddings_request)

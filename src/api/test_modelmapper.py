@@ -10,18 +10,23 @@ from api.modelmapper import get_model, load_model_map
 })
 class TestModelMapper(unittest.TestCase):
     def test_get_model_with_existing_model(self):
-        result = get_model("provider1", "model1")
+        result = get_model("provider1", "model1", "fallback_model")
         self.assertEqual(result, "mapped_model1")
 
     @patch("api.modelmapper._model_map", {
         "provider1": {
-            "model1": "mapped_model1"
+            "model1": "mapped_model1",
+            "fallback_model": "fallback_model",
         }
     })
 
     def test_get_model_with_case_insensitivity(self):
-        result = get_model("PROVIDER1", "MODEL1:latest")
+        result = get_model("PROVIDER1", "MODEL1:latest", "fallback_model")
         self.assertEqual(result, "mapped_model1")
+
+    def test_get_model_with_fallback(self):
+        result = get_model("PROVIDER1", None, "fallback_model")
+        self.assertEqual(result, "fallback_model")
 
     @patch("builtins.open", new_callable=mock_open, read_data='{"provider1": {"model1": "mapped_model1"}}')
     @patch("os.path.join", return_value="/mocked/path/modelmap.json")
