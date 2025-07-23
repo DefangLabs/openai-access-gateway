@@ -11,8 +11,10 @@ def load_model_map():
     with open(modelmap_path, "r") as f:
         _model_map = json.load(f)
 
-def get_model(provider, model):
+def get_model(provider, model, fallback_model):
     provider = provider.lower()
+    if model is None or model == "":
+        model = fallback_model
     model = model.lower().removesuffix(":latest")
 
     available_models = _model_map.get(provider, {})

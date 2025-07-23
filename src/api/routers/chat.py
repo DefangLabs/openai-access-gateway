@@ -36,13 +36,13 @@ async def chat_completions(
         ),
     ],
 ):
-    if chat_request.model.lower().startswith("gpt-"):
+    if chat_request.model != None and chat_request.model.lower().startswith("gpt-"):
         chat_request.model = DEFAULT_MODEL
 
     # replace with mapped model name 
     if USE_MODEL_MAPPING:
         req_model = chat_request.model
-        req_model = get_model("aws", req_model)
+        req_model = get_model("aws", req_model, "chat-default")
         chat_request.model = req_model
 
     model = BedrockModel()

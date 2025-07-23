@@ -869,7 +869,7 @@ class TitanEmbeddingsModel(BedrockEmbeddingsModel):
 
 
 def get_embeddings_model(model_id: str) -> BedrockEmbeddingsModel:
-    model_id = get_model("aws", model_id)
+    model_id = get_model("aws", model_id, "embedding-default")
     model_name = SUPPORTED_BEDROCK_EMBEDDING_MODELS.get(model_id, "")
     if DEBUG:
         logger.info("model name is " + model_name)
