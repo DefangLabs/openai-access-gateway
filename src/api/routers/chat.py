@@ -4,10 +4,9 @@ from fastapi import APIRouter, Body, Depends
 from fastapi.responses import StreamingResponse
 
 from api.auth import api_key_auth
+from api.modelmapper import get_model
 from api.models.bedrock import BedrockModel
 from api.schema import ChatRequest, ChatResponse, ChatStreamResponse, Error
-from api.modelmapper import get_model
-
 from api.setting import DEFAULT_MODEL, USE_MODEL_MAPPING
 
 router = APIRouter(
@@ -36,10 +35,10 @@ async def chat_completions(
         ),
     ],
 ):
-    if chat_request.model != None and chat_request.model.lower().startswith("gpt-"):
+    if chat_request.model is not None and chat_request.model.lower().startswith("gpt-"):
         chat_request.model = DEFAULT_MODEL
 
-    # replace with mapped model name 
+    # replace with mapped model name
     if USE_MODEL_MAPPING:
         req_model = chat_request.model
         req_model = get_model("aws", req_model, "chat-default")

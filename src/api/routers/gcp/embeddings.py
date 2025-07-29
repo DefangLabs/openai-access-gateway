@@ -1,20 +1,22 @@
-import httpx
 import json
 import logging
 import os
 
+import httpx
 from fastapi import APIRouter, Depends, Request, Response
+
 from api.auth import api_key_auth
+from api.gcp.credentials.metadata import get_access_token, location, project_id
+from api.modelmapper import get_model
 from api.schema import EmbeddingsResponse
 from api.setting import API_ROUTE_PREFIX
-
-from api.modelmapper import get_model
-from api.gcp.credentials.metadata import get_access_token, project_id, location
 
 router = APIRouter(
     prefix="/embeddings",
     dependencies=[Depends(api_key_auth)],
 )
+
+
 def get_proxy_target(model, path):
     """
     Check if the environment variable is set to use GCP.
@@ -24,13 +26,15 @@ def get_proxy_target(model, path):
     else:
         return f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/{model}:predict"
 
+
 def get_header(model, request, path):
     path_no_prefix = f"/{path.lstrip('/')}".removeprefix(API_ROUTE_PREFIX)
     target_url = get_proxy_target(model, path_no_prefix)
 
     # remove hop-by-hop headers
     headers = {
-        k: v for k, v in request.headers.items()
+        k: v
+        for k, v in request.headers.items()
         if k.lower() not in {"host", "content-length", "accept-encoding", "connection", "authorization"}
     }
 
@@ -39,6 +43,7 @@ def get_header(model, request, path):
     headers["Authorization"] = f"Bearer {access_token}"
     return target_url, headers
 
+
 def to_vertex_embeddings(request):
     """
     Convert OpenAI-style embeddings request to Vertex AI format.
@@ -46,17 +51,15 @@ def to_vertex_embeddings(request):
     inputs = request.get("input", [])
     if not isinstance(inputs, list):
         inputs = [inputs]
-    return {
-        "instances": [{"content": str(content)} for content in inputs]
-    }
+    return {"instances": [{"content": str(content)} for content in inputs]}
+
 
 def to_openai_response(embedding_content, model):
     """
     Convert Vertex AI embeddings response to OpenAI format.
     """
     total_tokens = sum(
-        item["embeddings"]["statistics"]["token_count"]
-        for item in embedding_content.get("predictions", [])
+        item["embeddings"]["statistics"]["token_count"] for item in embedding_content.get("predictions", [])
     )
 
     return {
@@ -65,14 +68,14 @@ def to_openai_response(embedding_content, model):
                 "embedding": item["embeddings"]["values"],
                 "index": idx,
                 "object": "embedding",
-            } for idx, item in enumerate(embedding_content.get("predictions", []))
+            }
+            for idx, item in enumerate(embedding_content.get("predictions", []))
         ],
         "model": model,
         "object": "list",
-        "usage": {
-            "total_tokens": total_tokens
-        }
+        "usage": {"total_tokens": total_tokens},
     }
+
 
 @router.post("/{path:path}", response_model=EmbeddingsResponse)
 async def handle_proxy(request: Request, path: str):
@@ -103,7 +106,8 @@ async def handle_proxy(request: Request, path: str):
 
     # remove hop-by-hop headers
     response_headers = {
-        k: v for k, v in response.headers.items()
+        k: v
+        for k, v in response.headers.items()
         if k.lower() not in {"content-encoding", "transfer-encoding", "connection"}
     }
 

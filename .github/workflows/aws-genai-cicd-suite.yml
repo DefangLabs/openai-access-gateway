@@ -51,3 +51,27 @@ jobs:
           echo "GitHub Token is not set"
         fi
         echo "AWS_ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_TO_ASSUME_VAR }}"
+
+    # -----------------------------
+    # 🐍 Python Linting with Ruff
+    # -----------------------------
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install ruff
+      run: pip install ruff
+
+    - name: Check for Python files
+      id: check_py
+      run: |
+        if ! find . -name '*.py' | grep -q .; then
+          echo "No Python files to lint."
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Run ruff linter
+      if: steps.check_py.outputs.skip != 'true'
+      run: |
+        ruff check . --output-format=github

@@ -1,16 +1,16 @@
 import logging
-import requests
 
+import requests
 from google.auth import default
 from google.auth.transport.requests import Request as AuthRequest
 
-from api.setting import GOOGLE_CLOUD_PROJECT, GCP_REGION
-
+from api.setting import GCP_REGION, GOOGLE_CLOUD_PROJECT
 
 # GCP credentials and project details
 credentials = None
 project_id = None
 location = None
+
 
 def get_gcp_project_details():
     from google.auth import default
@@ -29,16 +29,18 @@ def get_gcp_project_details():
             zone = requests.get(
                 "http://metadata.google.internal/computeMetadata/v1/instance/zone",
                 headers={"Metadata-Flavor": "Google"},
-                timeout=1
+                timeout=1,
             ).text
             location = zone.split("/")[-1].rsplit("-", 1)[0]
 
     except Exception:
-        logging.warning(f"Error: Failed to get project and location from metadata server. Using local settings.")
+        logging.warning("Error: Failed to get project and location from metadata server. Using local settings.")
 
     return credentials, project_id, location
 
+
 credentials, project_id, location = get_gcp_project_details()
+
 
 # Utility: get service account access token
 def get_access_token():

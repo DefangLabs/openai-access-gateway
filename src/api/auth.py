@@ -28,7 +28,7 @@ elif api_key_secret_arn:
         raise RuntimeError("Unable to retrieve API KEY, please ensure the secret ARN is correct")
     except KeyError:
         raise RuntimeError('Please ensure the secret contains a "api_key" field')
-elif api_key_env != None:
+elif api_key_env is not None:
     api_key = api_key_env
 else:
     # For local use only.

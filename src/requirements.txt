@@ -17,3 +17,7 @@ google-auth-oauthlib==1.0.0
 google-auth-httplib2==0.1.0
 google-api-python-client==2.108.0
 google-cloud-aiplatform==1.90.0
+
+# linter
+ruff>=0.12.5
+pre-commit>=2.20.0
