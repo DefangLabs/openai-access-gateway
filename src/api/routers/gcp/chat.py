@@ -163,6 +163,21 @@ async def stream_generator(target_url: str, request_headers: dict, content_json:
             logging.debug(f"Received response with status code: {response.status_code}")
             logging.debug(f"Response headers: {response.headers}")
 
+            # Handle 404 status code with custom error message
+            if response.status_code == 404:
+                error_message = f"Model '{model_alias}' not found or endpoint is unavailable. Have you tried enabling the model in the model garden? (https://console.cloud.google.com/vertex-ai/model-garden)"
+                logging.error(f"HTTP 404 error: {error_message}")
+                error_chunk = {
+                    "error": {
+                        "message": error_message,
+                        "type": "not_found_error",
+                        "code": "model_not_found"
+                    }
+                }
+                yield f"data: {json.dumps(error_chunk)}\n"
+                yield sse_done()
+                return
+
             async for line in response.aiter_lines():
                 logging.debug(f"Received line: {line}")
                 if not line.strip():
