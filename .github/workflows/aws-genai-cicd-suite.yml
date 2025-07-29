@@ -52,14 +52,16 @@ jobs:
         fi
         echo "AWS_ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_TO_ASSUME_VAR }}"
 
-    # -----------------------------
-    # 🐍 Python Linting with Ruff
-    # -----------------------------
+    # lint the code using ruff      
+    - name: Extract Python version from ruff.toml
+      id: pyver
+      run: |
+        version=$(grep -Po '(?<=^target-version = ")py[0-9]+' ruff.toml | sed 's/py/3./')
+        echo "version=$version" >> "$GITHUB_OUTPUT"
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
-
+        python-version: ${{ steps.pyver.outputs.version || '3.11' }}        
     - name: Install ruff
       run: pip install ruff
 
