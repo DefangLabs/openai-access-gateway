@@ -1,15 +1,16 @@
 import logging
 import os
-import uvicorn
 
+import uvicorn
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from mangum import Mangum
 
-from api.setting import API_ROUTE_PREFIX, DESCRIPTION, SUMMARY, PROVIDER, TITLE, USE_MODEL_MAPPING, VERSION
 from api.modelmapper import load_model_map
+from api.setting import API_ROUTE_PREFIX, DESCRIPTION, PROVIDER, SUMMARY, TITLE, USE_MODEL_MAPPING, VERSION
+
 
 def is_aws():
     env = os.getenv("AWS_EXECUTION_ENV")
@@ -21,8 +22,9 @@ def is_aws():
         return True
     return False
 
+
 provider = PROVIDER.lower() if PROVIDER else None
-if provider == None:
+if provider is None:
     if is_aws():
         provider = "aws"
     else:
@@ -55,29 +57,35 @@ app.add_middleware(
 
 if provider != "aws":
     from api.routers.gcp import chat, embeddings
-    logging.info(f"Proxy target set to: GCP")
+
+    logging.info("Proxy target set to: GCP")
     app.include_router(chat.router, prefix=API_ROUTE_PREFIX)
     app.include_router(embeddings.router, prefix=API_ROUTE_PREFIX)
 else:
     from api.routers import chat, embeddings, model
+
     logging.info("No proxy target set. Using internal routers.")
     app.include_router(model.router, prefix=API_ROUTE_PREFIX)
     app.include_router(chat.router, prefix=API_ROUTE_PREFIX)
     app.include_router(embeddings.router, prefix=API_ROUTE_PREFIX)
+
 
 @app.get("/", include_in_schema=False)
 async def root():
     """Root endpoint for the API"""
     return {"status": "OK"}
 
+
 @app.get("/health")
 async def health():
     """For health check if needed"""
     return {"status": "OK"}
 
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
     return PlainTextResponse(str(exc), status_code=400)
+
 
 handler = Mangum(app)
 

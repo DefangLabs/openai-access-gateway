@@ -51,3 +51,14 @@ jobs:
           echo "GitHub Token is not set"
         fi
         echo "AWS_ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_TO_ASSUME_VAR }}"
+
+    # lint the code using ruff
+    - name: Run Ruff linter
+      uses: astral-sh/ruff-action@v1
+      with:
+        args: check ./src
+
+    - name: Run Ruff formatter check
+      uses: astral-sh/ruff-action@v1
+      with:
+        args: "format --check"

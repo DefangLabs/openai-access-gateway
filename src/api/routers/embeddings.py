@@ -3,10 +3,10 @@ from typing import Annotated
 from fastapi import APIRouter, Body, Depends
 
 from api.auth import api_key_auth
+from api.modelmapper import get_model
 from api.models.bedrock import get_embeddings_model
 from api.schema import EmbeddingsRequest, EmbeddingsResponse
 from api.setting import DEFAULT_EMBEDDING_MODEL
-from api.modelmapper import get_model
 
 router = APIRouter(
     prefix="/embeddings",
@@ -28,7 +28,7 @@ async def embeddings(
         ),
     ],
 ):
-    if embeddings_request.model != None and embeddings_request.model.lower().startswith("text-embedding-"):
+    if embeddings_request.model is not None and embeddings_request.model.lower().startswith("text-embedding-"):
         embeddings_request.model = DEFAULT_EMBEDDING_MODEL
     # Exception will be raised if model not supported.
     embeddings_request.model = get_model("aws", embeddings_request.model, "embedding-default")

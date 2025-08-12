@@ -1,5 +1,14 @@
-*Issue #, if available:*
+## Description
 
-*Description of changes:*
+<!-- Concise description of what this PR is tackling. -->
 
-By submitting this pull request, I confirm that you can use, modify, copy, and redistribute this contribution, under the terms of your choice.
+## Linked Issues
+
+<!-- See https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue -->
+
+## Checklist
+
+- [ ] I have performed a self-review of my code
+- [ ] I have added appropriate tests
+- [ ] I have updated the Defang CLI docs and/or README to reflect my changes, if necessary
+  

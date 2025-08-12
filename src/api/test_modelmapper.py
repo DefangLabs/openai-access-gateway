@@ -1,25 +1,24 @@
 import unittest
-from unittest.mock import patch, mock_open
+from unittest.mock import mock_open, patch
+
 from api.modelmapper import get_model, load_model_map
 
-@patch("api.modelmapper._model_map", {
-    "provider1": {
-        "model1": "mapped_model1",
-        "model2": "mapped_model2"
-    }
-})
+
+@patch("api.modelmapper._model_map", {"provider1": {"model1": "mapped_model1", "model2": "mapped_model2"}})
 class TestModelMapper(unittest.TestCase):
     def test_get_model_with_existing_model(self):
         result = get_model("provider1", "model1", "fallback_model")
         self.assertEqual(result, "mapped_model1")
 
-    @patch("api.modelmapper._model_map", {
-        "provider1": {
-            "model1": "mapped_model1",
-            "fallback_model": "fallback_model",
-        }
-    })
-
+    @patch(
+        "api.modelmapper._model_map",
+        {
+            "provider1": {
+                "model1": "mapped_model1",
+                "fallback_model": "fallback_model",
+            }
+        },
+    )
     def test_get_model_with_case_insensitivity(self):
         result = get_model("PROVIDER1", "MODEL1:latest", "fallback_model")
         self.assertEqual(result, "mapped_model1")
@@ -34,12 +33,11 @@ class TestModelMapper(unittest.TestCase):
     @patch("os.path.abspath", return_value="/mocked/path/modelmapper.py")
     def test_load_model_map(self, mock_abspath, mock_dirname, mock_join, mock_open_file):
         import api.modelmapper as modelmapper  # <- directly access the module
+
         modelmapper._model_map = None  # Reset the actual global used by load_model_map
         modelmapper.load_model_map()
-        self.assertEqual(
-            modelmapper._model_map,
-            {"provider1": {"model1": "mapped_model1"}}
-        )
-        
+        self.assertEqual(modelmapper._model_map, {"provider1": {"model1": "mapped_model1"}})
+
+
 if __name__ == "__main__":
     unittest.main()

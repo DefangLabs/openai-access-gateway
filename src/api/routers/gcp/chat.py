@@ -1,21 +1,21 @@
-import httpx
 import json
 import logging
 import os
-
+from contextlib import asynccontextmanager
 from typing import AsyncGenerator
+
+import httpx
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import StreamingResponse
-from contextlib import asynccontextmanager
-from api.setting import API_ROUTE_PREFIX, USE_MODEL_MAPPING
 from google.auth import default
 from google.auth.transport.requests import Request as AuthRequest
 
 from api.auth import api_key_auth
+from api.gcp.credentials.metadata import get_access_token, location, project_id
 from api.modelmapper import get_model
-from api.gcp.credentials.metadata import get_access_token, project_id, location
+from api.routers.gcp.stream_transformers import handle_data_line, sse_chunk, sse_done
 from api.schema import ChatResponse, ChatStreamResponse, Error
-from api.routers.gcp.stream_transformers import handle_data_line, sse_done, sse_chunk
+from api.setting import API_ROUTE_PREFIX, USE_MODEL_MAPPING
 
 known_chat_models = [
     "publishers/mistral-ai/models/mistral-7b-instruct-v0.3",
@@ -40,6 +40,7 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
+
 def get_proxy_target(model, path, stream):
     """
     Check if the environment variable is set to use GCP.
@@ -52,6 +53,7 @@ def get_proxy_target(model, path, stream):
         endPointSuffix = "streamRawPredict" if stream else "rawPredict"
         return f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/{model}:{endPointSuffix}"
 
+
 def get_headers(model, request, path, stream):
     target_url = None
     path_no_prefix = f"/{path.lstrip('/')}".removeprefix(API_ROUTE_PREFIX)
@@ -59,7 +61,8 @@ def get_headers(model, request, path, stream):
 
     # remove hop-by-hop headers
     headers = {
-        k: v for k, v in request.headers.items()
+        k: v
+        for k, v in request.headers.items()
         if k.lower() not in {"host", "content-length", "accept-encoding", "connection", "authorization"}
     }
 
@@ -67,6 +70,7 @@ def get_headers(model, request, path, stream):
     access_token = get_access_token()
     headers["Authorization"] = f"Bearer {access_token}"
     return target_url, headers
+
 
 def _parse_system_prompts(openai_messages) -> str:
     system_prompts = ""
@@ -79,59 +83,54 @@ def _parse_system_prompts(openai_messages) -> str:
 
         return system_prompts
 
+
 def to_vertex_anthropic(openai_messages):
     message = []
     for m in openai_messages["messages"]:
         if m["role"] == "system":
             continue
-        message.append({
-            "role": m["role"],
-            "content": [{"type": "text", "text": m["content"]}]
-        })
+        message.append({"role": m["role"], "content": [{"type": "text", "text": m["content"]}]})
 
     system_prompts = _parse_system_prompts(openai_messages["messages"])
 
-    return {
-        "anthropic_version": "vertex-2023-10-16",
-        "max_tokens": 256,
-        "system": system_prompts,
-        "messages": message
-    }
+    return {"anthropic_version": "vertex-2023-10-16", "max_tokens": 256, "system": system_prompts, "messages": message}
+
 
 def from_anthropic_to_openai_response(msg, model):
     msg_json = json.loads(msg)
-    return json.dumps({
-        "id": msg_json["id"],
-        "object": "chat.completion",
-        "model": model,
-        "choices": [
-            {
-                "index": 0,
-                "message": {
-                    "role": msg_json["role"],
-                    "content": "".join(
-                        part["text"] for part in msg_json["content"]
-                        if part["type"] == "text"
-                    )
-                },
-                "finish_reason": msg_json.get("stop_reason", "stop")
-            }
-        ],
-        "usage": msg_json.get("usage", {})
-    })
+    return json.dumps(
+        {
+            "id": msg_json["id"],
+            "object": "chat.completion",
+            "model": model,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": msg_json["role"],
+                        "content": "".join(part["text"] for part in msg_json["content"] if part["type"] == "text"),
+                    },
+                    "finish_reason": msg_json.get("stop_reason", "stop"),
+                }
+            ],
+            "usage": msg_json.get("usage", {}),
+        }
+    )
+
 
 def get_chat_completion_model_name(model_alias):
     if model_alias.startswith("publishers/google/"):
         return f"google/{model_alias.split('/')[-1]}"
 
-    return model_alias.split('/')[-1]
+    return model_alias.split("/")[-1]
+
 
 def transform_vertex_chunk_to_openai(chunk_line: str, index: int = 0) -> str:
     if not chunk_line.startswith("data: "):
         return ""  # skip irrelevant lines like empty keepalives
 
     try:
-        payload = json.loads(chunk_line[len("data: "):])
+        payload = json.loads(chunk_line[len("data: ") :])
         parts = payload.get("candidates", [])[0].get("content", {}).get("parts", [])
         if not parts:
             return ""
@@ -139,19 +138,14 @@ def transform_vertex_chunk_to_openai(chunk_line: str, index: int = 0) -> str:
     except Exception:
         return ""
 
-    transformed = {
-        "choices": [
-            {
-                "delta": {"content": text},
-                "index": index,
-                "finish_reason": None
-            }
-        ]
-    }
+    transformed = {"choices": [{"delta": {"content": text}, "index": index, "finish_reason": None}]}
 
     return f"data: {json.dumps(transformed)}\n"
 
-async def stream_generator(target_url: str, request_headers: dict, content_json: dict, model_alias: str) -> AsyncGenerator[str, None]:
+
+async def stream_generator(
+    target_url: str, request_headers: dict, content_json: dict, model_alias: str
+) -> AsyncGenerator[str, None]:
     async with httpx.AsyncClient(timeout=None) as client:
         async with client.stream(
             "POST",
@@ -159,7 +153,6 @@ async def stream_generator(target_url: str, request_headers: dict, content_json:
             headers=request_headers,
             json=content_json,
         ) as response:
-
             logging.debug(f"Received response with status code: {response.status_code}")
             logging.debug(f"Response headers: {response.headers}")
 
@@ -173,13 +166,14 @@ async def stream_generator(target_url: str, request_headers: dict, content_json:
                     break
 
                 if line.startswith("data: "):
-                    raw_json = line[len("data: "):].strip()
+                    raw_json = line[len("data: ") :].strip()
                 else:
                     raw_json = line.strip()
                 async for chunk in handle_data_line(raw_json, model_alias):
                     logging.debug(f"Yielding chunk: '{chunk}'")
                     yield chunk
     yield sse_done()
+
 
 @router.post(
     "/completions", response_model=ChatResponse | ChatStreamResponse | Error, response_model_exclude_unset=True
@@ -209,7 +203,9 @@ async def handle_proxy(request: Request):
         logging.debug(f"Request headers: {request_headers}")
         logging.debug(f"Request content: {content_json}")
         if is_streaming:
-            return StreamingResponse(stream_generator(target_url, request_headers, content_json, model_alias), media_type="text/event-stream")
+            return StreamingResponse(
+                stream_generator(target_url, request_headers, content_json, model_alias), media_type="text/event-stream"
+            )
 
         async with httpx.AsyncClient() as client:
             response = await client.request(
@@ -232,7 +228,8 @@ async def handle_proxy(request: Request):
 
     # remove hop-by-hop headers
     response_headers = {
-        k: v for k, v in response.headers.items()
+        k: v
+        for k, v in response.headers.items()
         if k.lower() not in {"content-encoding", "transfer-encoding", "connection"}
     }
 
