@@ -64,7 +64,7 @@ if provider != "aws":
 else:
     from api.routers import chat, embeddings, model
 
-    logging.info("No proxy target set. Using internal routers.")
+    logging.info("No proxy target set. Using AWS.")
     app.include_router(model.router, prefix=API_ROUTE_PREFIX)
     app.include_router(chat.router, prefix=API_ROUTE_PREFIX)
     app.include_router(embeddings.router, prefix=API_ROUTE_PREFIX)
