@@ -291,14 +291,16 @@ class BedrockModel(BaseChatModel):
                     }
                 )
             elif isinstance(message, AssistantMessage):
-                if message.content.strip():
-                    # Text message
-                    messages.append(
-                        {
-                            "role": message.role,
-                            "content": self._parse_content_parts(message, chat_request.model),
-                        }
-                    )
+                if isinstance(message.content, str):
+                    message.content.strip()
+
+                messages.append(
+                    {
+                        "role": message.role,
+                        "content": self._parse_content_parts(message, chat_request.model),
+                    }
+                )
+
                 if message.tool_calls:
                     # Tool use message
                     for tool_call in message.tool_calls:
