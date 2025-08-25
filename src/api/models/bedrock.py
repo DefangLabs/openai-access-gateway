@@ -39,7 +39,13 @@ from api.schema import (
     Usage,
     UserMessage,
 )
-from api.setting import AWS_REGION, DEBUG, DEFAULT_MODEL, ENABLE_CROSS_REGION_INFERENCE
+from api.setting import (
+    AWS_REGION,
+    DEBUG,
+    DEFAULT_MODEL,
+    ENABLE_CROSS_REGION_INFERENCE,
+    ENABLE_APPLICATION_INFERENCE_PROFILES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,9 +75,9 @@ cr_inference_prefix = get_inference_region_prefix()
 SUPPORTED_BEDROCK_EMBEDDING_MODELS = {
     "cohere.embed-multilingual-v3": "Cohere Embed Multilingual",
     "cohere.embed-english-v3": "Cohere Embed English",
+    "amazon.titan-embed-text-v1": "Titan Embeddings G1 - Text",
     "amazon.titan-embed-text-v2:0": "Titan Text Embeddings V2",
     "amazon.titan-embed-image-v1": "Titan Multimodal Embeddings G1",
-    "amazon.titan-embed-text-v1": "Titan Embeddings G1 - Text",
 }
 
 ENCODER = tiktoken.get_encoding("cl100k_base")
@@ -83,14 +89,39 @@ def list_bedrock_models() -> dict:
     Returns a model list combines:
         - ON_DEMAND models.
         - Cross-Region Inference Profiles (if enabled via Env)
+        - Application Inference Profiles (if enabled via Env)
     """
     model_list = {}
     try:
         profile_list = []
+        app_profile_dict = {}
+
         if ENABLE_CROSS_REGION_INFERENCE:
             # List system defined inference profile IDs
             response = bedrock_client.list_inference_profiles(maxResults=1000, typeEquals="SYSTEM_DEFINED")
             profile_list = [p["inferenceProfileId"] for p in response["inferenceProfileSummaries"]]
+
+        if ENABLE_APPLICATION_INFERENCE_PROFILES:
+            # List application defined inference profile IDs and create mapping
+            response = bedrock_client.list_inference_profiles(maxResults=1000, typeEquals="APPLICATION")
+
+            for profile in response["inferenceProfileSummaries"]:
+                try:
+                    profile_arn = profile.get("inferenceProfileArn")
+                    if not profile_arn:
+                        continue
+
+                    # Process all models in the profile
+                    models = profile.get("models", [])
+                    for model in models:
+                        model_arn = model.get("modelArn", "")
+                        if model_arn:
+                            model_id = model_arn.split("/")[-1] if "/" in model_arn else model_arn
+                            if model_id:
+                                app_profile_dict[model_id] = profile_arn
+                except Exception as e:
+                    logger.warning(f"Error processing application profile: {e}")
+                    continue
 
         # List foundation models, only cares about text outputs here.
         response = bedrock_client.list_foundation_models(byOutputModality="TEXT")
@@ -114,6 +145,10 @@ def list_bedrock_models() -> dict:
             profile_id = cr_inference_prefix + "." + model_id
             if profile_id in profile_list:
                 model_list[profile_id] = {"modalities": input_modalities}
+
+            # Add application inference profiles
+            if model_id in app_profile_dict:
+                model_list[app_profile_dict[model_id]] = {"modalities": input_modalities}
 
     except Exception as e:
         logger.error(f"Unable to list models: {str(e)}")
@@ -877,7 +912,12 @@ def get_embeddings_model(model_id: str) -> BedrockEmbeddingsModel:
     match model_name:
         case "Cohere Embed Multilingual" | "Cohere Embed English":
             return CohereEmbeddingsModel()
-        case "Titan Text Embeddings V2" | "Titan Multimodal Embeddings G1" | "Titan Embeddings G1 - Text":
+        case (
+            "Titan Text Embeddings V2"
+            | "Titan Multimodal Embeddings G1"
+            | "Titan Embeddings G1 - Text"
+            | "Titan Embeddings G2 - Text"
+        ):
             return TitanEmbeddingsModel()
         case _:
             logger.error("Unsupported model id " + model_id)
