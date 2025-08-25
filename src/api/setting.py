@@ -26,3 +26,4 @@ GCP_ENDPOINT = os.getenv("GCP_ENDPOINT", "openapi")
 
 PROVIDER = os.getenv("PROVIDER", "GCP" if GCP_PROJECT_ID and GCP_REGION else "AWS")
 REGION = os.getenv("REGION", GCP_REGION if PROVIDER == "GCP" else AWS_REGION)
+ENABLE_APPLICATION_INFERENCE_PROFILES = os.environ.get("ENABLE_APPLICATION_INFERENCE_PROFILES", "true").lower() != "false"
