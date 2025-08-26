@@ -245,7 +245,7 @@ class BedrockModel(BaseChatModel):
             output_tokens=output_tokens,
         )
         if DEBUG:
-            logger.info("Proxy response :" + chat_response.model_dump_json())
+            logger.info("Proxy response (chat):" + chat_response.model_dump_json())
         return chat_response
 
     async def _async_iterate(self, stream):
@@ -265,22 +265,23 @@ class BedrockModel(BaseChatModel):
                 stream_response = self._create_response_stream(**args)
                 if not stream_response:
                     continue
-                if DEBUG:
-                    logger.info("Proxy response :" + stream_response.model_dump_json())
+                # if DEBUG:
+                #     logger.info("Proxy response (stream):" + stream_response.model_dump_json())
                 if stream_response.choices:
+                    logger.info("Proxy response (stream) choice:" + stream_response.model_dump_json())
                     yield self.stream_response_to_bytes(stream_response)
                 elif chat_request.stream_options and chat_request.stream_options.include_usage:
-                    # An empty choices for Usage as per OpenAI doc below:
-                    # if you set stream_options: {"include_usage": true}.
-                    # an additional chunk will be streamed before the data: [DONE] message.
-                    # The usage field on this chunk shows the token usage statistics for the entire request,
-                    # and the choices field will always be an empty array.
-                    # All other chunks will also include a usage field, but with a null value.
                     yield self.stream_response_to_bytes(stream_response)
+                else:
+                    # If choices is empty and not usage-only, yield an error chunk
+                    logger.error("Empty choices in non-usage chunk; returning error response.")
+                    error_event = Error(error=ErrorMessage(message="Model did not return any choices."))
+                    yield self.stream_response_to_bytes(error_event)
 
             # return an [DONE] message at the end.
             yield self.stream_response_to_bytes()
         except Exception as e:
+            logger.error("Streaming Error: message " + str(e))
             error_event = Error(error=ErrorMessage(message=str(e)))
             yield self.stream_response_to_bytes(error_event)
 
@@ -299,10 +300,25 @@ class BedrockModel(BaseChatModel):
             if message.role != "system":
                 # ignore system messages here
                 continue
-            assert isinstance(message.content, str)
-            system_prompts.append({"text": message.content})
+            system_prompts.append({"text": self._extract_text_content(message.content)})
 
         return system_prompts
+
+    def _extract_text_content(self, content):
+        """Extract text content from either string or list of TextContent objects"""
+        if isinstance(content, str):
+            return content
+        elif isinstance(content, list):
+            # Concatenate text from all TextContent objects
+            text_parts = []
+            for item in content:
+                if isinstance(item, TextContent):
+                    text_parts.append(item.text)
+                elif hasattr(item, "text"):
+                    text_parts.append(item.text)
+            return " ".join(text_parts) if text_parts else ""
+        else:
+            return str(content)
 
     def _parse_messages(self, chat_request: ChatRequest) -> list[dict]:
         """
@@ -326,9 +342,7 @@ class BedrockModel(BaseChatModel):
                     }
                 )
             elif isinstance(message, AssistantMessage):
-                if isinstance(message.content, str):
-                    message.content.strip()
-
+                # Content is handled by _parse_content_parts
                 messages.append(
                     {
                         "role": message.role,
@@ -365,7 +379,7 @@ class BedrockModel(BaseChatModel):
                             {
                                 "toolResult": {
                                     "toolUseId": message.tool_call_id,
-                                    "content": [{"text": message.content}],
+                                    "content": [{"text": self._extract_text_content(message.content)}],
                                 }
                             }
                         ],
@@ -824,7 +838,7 @@ class BedrockEmbeddingsModel(BaseEmbeddingsModel, ABC):
             ),
         )
         if DEBUG:
-            logger.info("Proxy response :" + response.model_dump_json())
+            logger.info("Proxy response (embedding):" + response.model_dump_json())
         return response
 
 

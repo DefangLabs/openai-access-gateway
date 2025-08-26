@@ -1,5 +1,5 @@
 import time
-from typing import Iterable, Literal
+from typing import Iterable, Literal, Union
 
 from pydantic import BaseModel, Field
 
@@ -46,7 +46,7 @@ class ImageContent(BaseModel):
 class SystemMessage(BaseModel):
     name: str | None = None
     role: Literal["system"] = "system"
-    content: str
+    content: str | list[TextContent | ImageContent]
 
 
 class UserMessage(BaseModel):
@@ -64,7 +64,7 @@ class AssistantMessage(BaseModel):
 
 class ToolMessage(BaseModel):
     role: Literal["tool"] = "tool"
-    content: str
+    content: str | list[TextContent | ImageContent]
     tool_call_id: str
 
 
@@ -84,7 +84,7 @@ class StreamOptions(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    messages: list[SystemMessage | UserMessage | AssistantMessage | ToolMessage]
+    messages: list[Union[SystemMessage, UserMessage, AssistantMessage, ToolMessage]]
     model: str | None = None
     frequency_penalty: float | None = Field(default=0.0, le=2.0, ge=-2.0)  # Not used
     presence_penalty: float | None = Field(default=0.0, le=2.0, ge=-2.0)  # Not used
@@ -111,7 +111,7 @@ class Usage(BaseModel):
 class ChatResponseMessage(BaseModel):
     # tool_calls
     role: Literal["assistant"] | None = None
-    content: str | None = None
+    content: str | list[TextContent | ImageContent] | None = None
     tool_calls: list[ToolCall] | None = None
     reasoning_content: str | None = None
 
