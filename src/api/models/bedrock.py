@@ -245,7 +245,7 @@ class BedrockModel(BaseChatModel):
             output_tokens=output_tokens,
         )
         if DEBUG:
-            logger.info("Proxy response (chat):" + chat_response.model_dump_json())
+            logger.info("Proxy response:" + chat_response.model_dump_json())
         return chat_response
 
     async def _async_iterate(self, stream):
@@ -265,10 +265,10 @@ class BedrockModel(BaseChatModel):
                 stream_response = self._create_response_stream(**args)
                 if not stream_response:
                     continue
-                # if DEBUG:
-                #     logger.info("Proxy response (stream):" + stream_response.model_dump_json())
+                if DEBUG:
+                    logger.info("Proxy response:" + stream_response.model_dump_json())
                 if stream_response.choices:
-                    logger.info("Proxy response (stream) choice:" + stream_response.model_dump_json())
+                    logger.info("Proxy response choice:" + stream_response.model_dump_json())
                     yield self.stream_response_to_bytes(stream_response)
                 elif chat_request.stream_options and chat_request.stream_options.include_usage:
                     yield self.stream_response_to_bytes(stream_response)
@@ -838,7 +838,7 @@ class BedrockEmbeddingsModel(BaseEmbeddingsModel, ABC):
             ),
         )
         if DEBUG:
-            logger.info("Proxy response (embedding):" + response.model_dump_json())
+            logger.info("Proxy response:" + response.model_dump_json())
         return response
 
 
