@@ -53,19 +53,30 @@ def _parse_system_prompts(openai_messages) -> str:
         return system_prompts
 
 
-def to_vertex_anthropic(openai_messages):
-    message = []
+def to_vertex_anthropic(openai_messages, streaming=False):
+    """Convert OpenAI messages to Vertex Anthropic format."""
+    messages = []
     for m in openai_messages["messages"]:
         if m["role"] == "system":
             continue
+
         if isinstance(m["content"], str):
-            message.append({"role": m["role"], "content": {"type": "text", "text": m["content"]}})
+            content = {"type": "text", "text": m["content"]} if streaming else [{"type": "text", "text": m["content"]}]
         else:
-            message.append({"role": m["role"], "content": m["content"]})
+            content = m["content"] if streaming else [m["content"]]
+
+        messages.append({"role": m["role"], "content": content})
 
     system_prompts = _parse_system_prompts(openai_messages["messages"])
 
-    return {"anthropic_version": "vertex-2023-10-16", "max_tokens": 256, "system": system_prompts, "messages": message}
+    result = {
+        "anthropic_version": "vertex-2023-10-16",
+        "max_tokens": 256,
+        "messages": messages,
+    }
+    if system_prompts:
+        result["system"] = system_prompts
+    return result
 
 
 def from_anthropic_to_openai_response(msg, model):
@@ -165,7 +176,7 @@ async def handle_proxy(request: Request):
         if model not in known_chat_models:
             # openai messages to vertex contents
             if "anthropic" in model:
-                content_json = to_vertex_anthropic(content_json)
+                content_json = to_vertex_anthropic(content_json, is_streaming)
                 conversion_target = "anthropic"
 
         # Build safe target URL
@@ -188,17 +199,17 @@ async def handle_proxy(request: Request):
                 headers=request_headers,
                 content=json.dumps(content_json),
                 params=request.query_params,
-                timeout=5.0,
+                timeout=10.0,
             )
 
         content = response.content
-        if conversion_target == "anthropic":
+        if conversion_target == "anthropic" and response.status_code < 400:
             # convert vertex response to openai format
             content = from_anthropic_to_openai_response(response.content, model_alias)
 
     except httpx.RequestError as e:
-        logging.error(f"Proxy request failed: {e}")
-        return Response(status_code=502, content=f"Upstream request failed: {e}")
+        logging.error(f"Proxy request failed: {str(e)}")
+        return Response(status_code=502, content=f"Upstream request failed: {str(e)}")
 
     # remove hop-by-hop headers
     response_headers = {

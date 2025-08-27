@@ -31,7 +31,7 @@ def test_to_vertex_anthropic():
             {"role": "assistant", "content": "Hi there!"},
         ]
     }
-    result = chat.to_vertex_anthropic(openai_messages)
+    result = chat.to_vertex_anthropic_streaming(openai_messages)
     assert result["anthropic_version"] == "vertex-2023-10-16"
     assert result["system"] == "You are a helpful assistant.\n"
     assert result["max_tokens"] == 256
