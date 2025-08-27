@@ -84,9 +84,6 @@ async def health():
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
-    body = await request.body()
-    logging.error(f"Validation error for request {request.method} {request.url} with body: {body.decode()}")
-    logging.error(f"Exception details: {exc}")
     return PlainTextResponse(str(exc), status_code=400)
 
 

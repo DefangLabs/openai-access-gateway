@@ -43,8 +43,8 @@ from api.setting import (
     AWS_REGION,
     DEBUG,
     DEFAULT_MODEL,
-    ENABLE_CROSS_REGION_INFERENCE,
     ENABLE_APPLICATION_INFERENCE_PROFILES,
+    ENABLE_CROSS_REGION_INFERENCE,
 )
 
 logger = logging.getLogger(__name__)
@@ -245,7 +245,7 @@ class BedrockModel(BaseChatModel):
             output_tokens=output_tokens,
         )
         if DEBUG:
-            logger.info("Proxy response:" + chat_response.model_dump_json())
+            logger.info("Proxy response :" + chat_response.model_dump_json())
         return chat_response
 
     async def _async_iterate(self, stream):
@@ -266,22 +266,21 @@ class BedrockModel(BaseChatModel):
                 if not stream_response:
                     continue
                 if DEBUG:
-                    logger.info("Proxy response:" + stream_response.model_dump_json())
+                    logger.info("Proxy response :" + stream_response.model_dump_json())
                 if stream_response.choices:
-                    logger.info("Proxy response choice:" + stream_response.model_dump_json())
                     yield self.stream_response_to_bytes(stream_response)
                 elif chat_request.stream_options and chat_request.stream_options.include_usage:
+                    # An empty choices for Usage as per OpenAI doc below:
+                    # if you set stream_options: {"include_usage": true}.
+                    # an additional chunk will be streamed before the data: [DONE] message.
+                    # The usage field on this chunk shows the token usage statistics for the entire request,
+                    # and the choices field will always be an empty array.
+                    # All other chunks will also include a usage field, but with a null value.
                     yield self.stream_response_to_bytes(stream_response)
-                else:
-                    # If choices is empty and not usage-only, yield an error chunk
-                    logger.error("Empty choices in non-usage chunk; returning error response.")
-                    error_event = Error(error=ErrorMessage(message="Model did not return any choices."))
-                    yield self.stream_response_to_bytes(error_event)
 
             # return an [DONE] message at the end.
             yield self.stream_response_to_bytes()
         except Exception as e:
-            logger.error("Streaming Error: message " + str(e))
             error_event = Error(error=ErrorMessage(message=str(e)))
             yield self.stream_response_to_bytes(error_event)
 
@@ -838,7 +837,7 @@ class BedrockEmbeddingsModel(BaseEmbeddingsModel, ABC):
             ),
         )
         if DEBUG:
-            logger.info("Proxy response:" + response.model_dump_json())
+            logger.info("Proxy response :" + response.model_dump_json())
         return response
 
 

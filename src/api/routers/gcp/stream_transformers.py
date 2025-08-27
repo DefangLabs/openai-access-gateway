@@ -3,17 +3,7 @@ import logging
 import time
 from typing import AsyncGenerator
 
-
-def sse_chunk(payload: str) -> str:
-    return f"data: {payload}\n\n"
-
-
-def sse_done() -> str:
-    return "data: [DONE]\n\n"
-
-
-def generate_openai_id() -> str:
-    return f"chatcmpl-ts{int(time.time() * 1000)}"
+from api.routers.gcp.common import generate_openai_id, sse_chunk, sse_done, to_openai_usage
 
 
 def transform_claude(data: dict):
@@ -30,21 +20,21 @@ def transform_claude(data: dict):
         return json.dumps({"choices": [{"delta": {}, "index": 0, "finish_reason": data["delta"]["stop_reason"]}]})
 
     if data["type"] == "message":
-        return json.dumps(
-            {
-                "id": generate_openai_id(),
-                "object": "chat.completion",
-                "model": data["model"],
-                "choices": [
-                    {
-                        "index": 0,
-                        "delta": {"content": data["content"][0]["text"]},
-                        "finish_reason": data.get("stop_reason", "stop"),
-                    }
-                ],
-                "usage": {},
-            }
-        )
+        response = {
+            "id": generate_openai_id(),
+            "object": "chat.completion",
+            "model": data["model"],
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"content": data["content"][0]["text"]},
+                    "finish_reason": data.get("stop_reason", "stop"),
+                }
+            ],
+        }
+        if data.get("usage"):
+            response["usage"] = to_openai_usage(data["usage"])
+        return json.dumps(response)
 
     logging.warning(f"Unknown data type: {data['type']}")
 
