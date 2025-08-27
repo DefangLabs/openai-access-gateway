@@ -199,7 +199,7 @@ async def handle_proxy(request: Request):
                 headers=request_headers,
                 content=json.dumps(content_json),
                 params=request.query_params,
-                timeout=10.0,
+                timeout=60.0,
             )
 
         content = response.content
