@@ -1,5 +1,5 @@
 import time
-from typing import Iterable, Literal, Union
+from typing import Iterable, Literal
 
 from pydantic import BaseModel, Field
 
@@ -84,7 +84,7 @@ class StreamOptions(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    messages: list[Union[SystemMessage, UserMessage, AssistantMessage, ToolMessage]]
+    messages: list[SystemMessage | UserMessage | AssistantMessage | ToolMessage]
     model: str | None = None
     frequency_penalty: float | None = Field(default=0.0, le=2.0, ge=-2.0)  # Not used
     presence_penalty: float | None = Field(default=0.0, le=2.0, ge=-2.0)  # Not used
