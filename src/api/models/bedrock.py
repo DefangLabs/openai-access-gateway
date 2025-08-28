@@ -43,8 +43,8 @@ from api.setting import (
     AWS_REGION,
     DEBUG,
     DEFAULT_MODEL,
-    ENABLE_CROSS_REGION_INFERENCE,
     ENABLE_APPLICATION_INFERENCE_PROFILES,
+    ENABLE_CROSS_REGION_INFERENCE,
 )
 
 logger = logging.getLogger(__name__)
@@ -299,10 +299,25 @@ class BedrockModel(BaseChatModel):
             if message.role != "system":
                 # ignore system messages here
                 continue
-            assert isinstance(message.content, str)
-            system_prompts.append({"text": message.content})
+            system_prompts.append({"text": self._extract_text_content(message.content)})
 
         return system_prompts
+
+    def _extract_text_content(self, content):
+        """Extract text content from either string or list of TextContent objects"""
+        if isinstance(content, str):
+            return content
+        elif isinstance(content, list):
+            # Concatenate text from all TextContent objects
+            text_parts = []
+            for item in content:
+                if isinstance(item, TextContent):
+                    text_parts.append(item.text)
+                elif hasattr(item, "text"):
+                    text_parts.append(item.text)
+            return " ".join(text_parts) if text_parts else ""
+        else:
+            return str(content)
 
     def _parse_messages(self, chat_request: ChatRequest) -> list[dict]:
         """
@@ -326,9 +341,7 @@ class BedrockModel(BaseChatModel):
                     }
                 )
             elif isinstance(message, AssistantMessage):
-                if isinstance(message.content, str):
-                    message.content.strip()
-
+                # Content is handled by _parse_content_parts
                 messages.append(
                     {
                         "role": message.role,
@@ -358,6 +371,23 @@ class BedrockModel(BaseChatModel):
                 # Bedrock does not support tool role,
                 # Add toolResult to content
                 # https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ToolResultBlock.html
+                content = []
+                for contentItem in message.content:
+                    if isinstance(contentItem, str):
+                        content.append({"text": contentItem})
+                    elif isinstance(contentItem, TextContent):
+                        content.append({"text": contentItem.text})
+                    elif isinstance(contentItem, ImageContent):
+                        content.append(
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": contentItem.image_url.url,
+                                    "detail": contentItem.image_url.detail or "auto",
+                                },
+                            }
+                        )
+
                 messages.append(
                     {
                         "role": "user",
@@ -365,7 +395,7 @@ class BedrockModel(BaseChatModel):
                             {
                                 "toolResult": {
                                     "toolUseId": message.tool_call_id,
-                                    "content": [{"text": message.content}],
+                                    "content": content,
                                 }
                             }
                         ],

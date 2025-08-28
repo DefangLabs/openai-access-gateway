@@ -46,7 +46,7 @@ class ImageContent(BaseModel):
 class SystemMessage(BaseModel):
     name: str | None = None
     role: Literal["system"] = "system"
-    content: str
+    content: str | list[TextContent | ImageContent]
 
 
 class UserMessage(BaseModel):
@@ -64,7 +64,7 @@ class AssistantMessage(BaseModel):
 
 class ToolMessage(BaseModel):
     role: Literal["tool"] = "tool"
-    content: str
+    content: str | list[TextContent | ImageContent]
     tool_call_id: str
 
 
@@ -111,7 +111,7 @@ class Usage(BaseModel):
 class ChatResponseMessage(BaseModel):
     # tool_calls
     role: Literal["assistant"] | None = None
-    content: str | None = None
+    content: str | list[TextContent | ImageContent] | None = None
     tool_calls: list[ToolCall] | None = None
     reasoning_content: str | None = None
 

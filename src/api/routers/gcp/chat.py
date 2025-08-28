@@ -1,21 +1,17 @@
 import json
 import logging
-import os
-from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 import httpx
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import StreamingResponse
-from google.auth import default
-from google.auth.transport.requests import Request as AuthRequest
 
 from api.auth import api_key_auth
-from api.gcp.credentials.metadata import get_access_token, location, project_id
 from api.modelmapper import get_model
-from api.routers.gcp.stream_transformers import handle_data_line, sse_chunk, sse_done
+from api.routers.gcp.common import get_headers_and_target, sse_done, to_openai_usage
+from api.routers.gcp.stream_transformers import handle_data_line
 from api.schema import ChatResponse, ChatStreamResponse, Error
-from api.setting import API_ROUTE_PREFIX, USE_MODEL_MAPPING
+from api.setting import USE_MODEL_MAPPING
 
 known_chat_models = [
     "publishers/mistral-ai/models/mistral-7b-instruct-v0.3",
@@ -41,81 +37,67 @@ router = APIRouter(
 )
 
 
-def get_proxy_target(model, path, stream):
-    """
-    Check if the environment variable is set to use GCP.
-    """
-    if os.getenv("PROXY_TARGET"):
-        return os.getenv("PROXY_TARGET")
-    elif model in known_chat_models and path.endswith("/chat/completions"):
-        return f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/openapi/chat/completions"
-    else:
-        endPointSuffix = "streamRawPredict" if stream else "rawPredict"
-        return f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/{model}:{endPointSuffix}"
-
-
-def get_headers(model, request, path, stream):
-    target_url = None
-    path_no_prefix = f"/{path.lstrip('/')}".removeprefix(API_ROUTE_PREFIX)
-    target_url = get_proxy_target(model, path_no_prefix, stream)
-
-    # remove hop-by-hop headers
-    headers = {
-        k: v
-        for k, v in request.headers.items()
-        if k.lower() not in {"host", "content-length", "accept-encoding", "connection", "authorization"}
-    }
-
-    # Fetch service account token
-    access_token = get_access_token()
-    headers["Authorization"] = f"Bearer {access_token}"
-    return target_url, headers
-
-
 def _parse_system_prompts(openai_messages) -> str:
     system_prompts = ""
     for message in openai_messages:
         if message["role"] != "system":
-            # ignore system messages here
+            # ignore non-system messages here
             continue
         assert isinstance(message["content"], str)
         system_prompts += message["content"] + "\n"
 
-        return system_prompts
+    return system_prompts
 
 
-def to_vertex_anthropic(openai_messages):
-    message = []
+def to_vertex_anthropic(openai_messages, streaming=False):
+    """Convert OpenAI messages to Vertex Anthropic format."""
+    messages = []
     for m in openai_messages["messages"]:
         if m["role"] == "system":
             continue
-        message.append({"role": m["role"], "content": [{"type": "text", "text": m["content"]}]})
+
+        text = m["content"]
+        if isinstance(m["content"], str):
+            content = {"type": "text", "text": text}
+            if not streaming:
+                content = [content]
+        else:
+            content = text
+
+        messages.append({"role": m["role"], "content": content})
 
     system_prompts = _parse_system_prompts(openai_messages["messages"])
 
-    return {"anthropic_version": "vertex-2023-10-16", "max_tokens": 256, "system": system_prompts, "messages": message}
+    result = {
+        "anthropic_version": "vertex-2023-10-16",
+        "max_tokens": 256,
+        "messages": messages,
+    }
+    if system_prompts:
+        result["system"] = system_prompts
+    return result
 
 
 def from_anthropic_to_openai_response(msg, model):
     msg_json = json.loads(msg)
-    return json.dumps(
-        {
-            "id": msg_json["id"],
-            "object": "chat.completion",
-            "model": model,
-            "choices": [
-                {
-                    "index": 0,
-                    "message": {
-                        "role": msg_json["role"],
-                        "content": "".join(part["text"] for part in msg_json["content"] if part["type"] == "text"),
-                    },
-                    "finish_reason": msg_json.get("stop_reason", "stop"),
-                }
-            ],
-            "usage": msg_json.get("usage", {}),
-        }
-    )
+    response = {
+        "id": msg_json["id"],
+        "object": "chat.completion",
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": msg_json["role"],
+                    "content": "".join(part["text"] for part in msg_json["content"] if part["type"] == "text"),
+                },
+                "finish_reason": msg_json.get("stop_reason", "stop"),
+            }
+        ],
+    }
+    if msg_json.get("usage"):
+        response["usage"] = to_openai_usage(msg_json["usage"])
+    return json.dumps(response)
 
 
 def get_chat_completion_model_name(model_alias):
@@ -193,11 +175,13 @@ async def handle_proxy(request: Request):
         if model not in known_chat_models:
             # openai messages to vertex contents
             if "anthropic" in model:
-                content_json = to_vertex_anthropic(content_json)
+                content_json = to_vertex_anthropic(content_json, is_streaming)
                 conversion_target = "anthropic"
 
         # Build safe target URL
-        target_url, request_headers = get_headers(model, request, "chat/completions", is_streaming)
+        target_url, request_headers = get_headers_and_target(
+            model, request, "chat/completions", is_streaming, known_chat_models
+        )
 
         logging.debug(f"Proxying request to: {target_url}")
         logging.debug(f"Request headers: {request_headers}")
@@ -214,17 +198,17 @@ async def handle_proxy(request: Request):
                 headers=request_headers,
                 content=json.dumps(content_json),
                 params=request.query_params,
-                timeout=5.0,
+                timeout=60.0,
             )
 
         content = response.content
-        if conversion_target == "anthropic":
+        if conversion_target == "anthropic" and response.status_code < 400:
             # convert vertex response to openai format
             content = from_anthropic_to_openai_response(response.content, model_alias)
 
     except httpx.RequestError as e:
-        logging.error(f"Proxy request failed: {e}")
-        return Response(status_code=502, content=f"Upstream request failed: {e}")
+        logging.error(f"Proxy request failed: {str(e)}")
+        return Response(status_code=502, content=f"Upstream request failed: {str(e)}")
 
     # remove hop-by-hop headers
     response_headers = {

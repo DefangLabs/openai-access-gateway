@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 
 import httpx
 from fastapi import APIRouter, Depends, Request, Response
@@ -8,6 +7,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from api.auth import api_key_auth
 from api.gcp.credentials.metadata import get_access_token, location, project_id
 from api.modelmapper import get_model
+from api.routers.gcp.common import get_headers_and_target
 from api.schema import EmbeddingsResponse
 from api.setting import API_ROUTE_PREFIX
 
@@ -15,33 +15,6 @@ router = APIRouter(
     prefix="/embeddings",
     dependencies=[Depends(api_key_auth)],
 )
-
-
-def get_proxy_target(model, path):
-    """
-    Check if the environment variable is set to use GCP.
-    """
-    if os.getenv("PROXY_TARGET"):
-        return os.getenv("PROXY_TARGET")
-    else:
-        return f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/{model}:predict"
-
-
-def get_header(model, request, path):
-    path_no_prefix = f"/{path.lstrip('/')}".removeprefix(API_ROUTE_PREFIX)
-    target_url = get_proxy_target(model, path_no_prefix)
-
-    # remove hop-by-hop headers
-    headers = {
-        k: v
-        for k, v in request.headers.items()
-        if k.lower() not in {"host", "content-length", "accept-encoding", "connection", "authorization"}
-    }
-
-    # Fetch service account token
-    access_token = get_access_token()
-    headers["Authorization"] = f"Bearer {access_token}"
-    return target_url, headers
 
 
 def to_vertex_embeddings(request):
@@ -86,7 +59,7 @@ async def handle_proxy(request: Request, path: str):
         model = get_model("gcp", model_alias, "embedding-default")
 
         # Build safe target URL
-        target_url, request_headers = get_header(model, request, path)
+        target_url, request_headers = get_headers_and_target(model, request, path)
         vertex_embedding_content = to_vertex_embeddings(content_json)
         async with httpx.AsyncClient() as client:
             response = await client.request(

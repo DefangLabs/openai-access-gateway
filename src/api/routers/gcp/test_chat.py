@@ -6,6 +6,7 @@ from fastapi import Response
 from starlette.datastructures import Headers, QueryParams
 
 import api.routers.gcp.chat as chat
+from api.routers.gcp.common import get_headers_and_target, get_proxy_target
 
 
 @pytest.fixture
@@ -37,8 +38,10 @@ def test_to_vertex_anthropic():
     assert result["max_tokens"] == 256
     assert isinstance(result["messages"], list)
     assert result["messages"][0]["role"] == "user"
+    assert result["messages"][0]["content"][0]["type"] == "text"
     assert result["messages"][0]["content"][0]["text"] == "Hello!"
     assert result["messages"][1]["role"] == "assistant"
+    assert result["messages"][1]["content"][0]["type"] == "text"
     assert result["messages"][1]["content"][0]["text"] == "Hi there!"
 
 
@@ -49,7 +52,7 @@ def test_from_anthropic_to_openai_response():
             "role": "assistant",
             "content": [{"type": "text", "text": "Hello!"}, {"type": "text", "text": "Bye!"}],
             "stop_reason": "stop",
-            "usage": {"prompt_tokens": 5, "completion_tokens": 2},
+            "usage": {"input_tokens": 5, "output_tokens": 2},
         }
     )
     result = json.loads(chat.from_anthropic_to_openai_response(msg, "default"))
@@ -59,11 +62,13 @@ def test_from_anthropic_to_openai_response():
     assert result["choices"][0]["message"]["content"] == "Hello!Bye!"
     assert result["choices"][0]["finish_reason"] == "stop"
     assert result["usage"]["prompt_tokens"] == 5
+    assert result["usage"]["completion_tokens"] == 2
+    assert result["usage"]["total_tokens"] == 7
 
 
 def test_get_proxy_target_env(monkeypatch):
     monkeypatch.setenv("PROXY_TARGET", "https://custom-proxy")
-    result = chat.get_proxy_target("any-model", "/v1/chat/completions", False)
+    result = get_proxy_target("any-model", "/v1/chat/completions", False)
     assert result == "https://custom-proxy"
 
 
@@ -71,7 +76,7 @@ def test_get_proxy_target_known_chat(monkeypatch):
     monkeypatch.delenv("PROXY_TARGET", raising=False)
     model = chat.known_chat_models[0]
     path = "/v1/chat/completions"
-    result = chat.get_proxy_target(model, path, False)
+    result = get_proxy_target(model, path, False, chat.known_chat_models)
     assert "endpoints/openapi/chat/completions" in result
 
 
@@ -79,7 +84,7 @@ def test_get_proxy_target_raw_predict(monkeypatch):
     monkeypatch.delenv("PROXY_TARGET", raising=False)
     model = "unknown-model"
     path = "/v1/other"
-    result = chat.get_proxy_target(model, path, False)
+    result = get_proxy_target(model, path, False)
     assert ":rawPredict" in result
 
 
@@ -87,11 +92,11 @@ def test_get_proxy_target_stream_raw_predict(monkeypatch):
     monkeypatch.delenv("PROXY_TARGET", raising=False)
     model = "unknown-model"
     path = "/v1/other"
-    result = chat.get_proxy_target(model, path, True)
+    result = get_proxy_target(model, path, True)
     assert ":streamRawPredict" in result
 
 
-@patch("api.routers.gcp.chat.get_access_token", return_value="dummy-token")
+@patch("api.routers.gcp.common.get_access_token", return_value="dummy-token")
 def test_get_header_removes_hop_headers(mock_token, dummy_request):
     req = dummy_request(
         headers={
@@ -105,8 +110,8 @@ def test_get_header_removes_hop_headers(mock_token, dummy_request):
     )
     model = "test-model"
     path = "/v1/chat/completions"
-    with patch("api.routers.gcp.chat.get_proxy_target", return_value="http://target"):
-        target_url, header = chat.get_headers(model, req, path, False)
+    with patch("api.routers.gcp.common.get_proxy_target", return_value="http://target"):
+        target_url, header = get_headers_and_target(model, req, path, False)
     assert target_url == "http://target"
     assert "Host" not in header
     assert "Content-Length" not in header
@@ -119,7 +124,7 @@ def test_get_header_removes_hop_headers(mock_token, dummy_request):
 
 @pytest.mark.asyncio
 @patch("api.routers.gcp.chat.httpx.AsyncClient")
-@patch("api.routers.gcp.chat.get_headers")
+@patch("api.routers.gcp.common.get_headers_and_target")
 @patch("api.routers.gcp.chat.get_model", return_value="test-model")
 async def test_handle_proxy_basic(mock_get_model, mock_get_headers, mock_async_client, dummy_request):
     req = dummy_request(body=json.dumps({"model": "foo"}).encode())
@@ -140,7 +145,7 @@ async def test_handle_proxy_basic(mock_get_model, mock_get_headers, mock_async_c
 
 @pytest.mark.asyncio
 @patch("api.routers.gcp.chat.httpx.AsyncClient")
-@patch("api.routers.gcp.chat.get_headers")
+@patch("api.routers.gcp.common.get_headers_and_target")
 @patch("api.routers.gcp.chat.get_model", return_value="test-model")
 async def test_handle_proxy_known_chat_model(mock_get_model, mock_get_headers, mock_async_client, dummy_request):
     req = dummy_request(body=json.dumps({"model": "foo"}).encode())
@@ -164,7 +169,7 @@ async def test_handle_proxy_known_chat_model(mock_get_model, mock_get_headers, m
 
 @pytest.mark.asyncio
 @patch("api.routers.gcp.chat.httpx.AsyncClient")
-@patch("api.routers.gcp.chat.get_headers")
+@patch("api.routers.gcp.common.get_headers_and_target")
 @patch("api.routers.gcp.chat.get_model", return_value="anthropic-model")
 async def test_handle_proxy_anthropic_conversion(mock_get_model, mock_get_headers, mock_async_client, dummy_request):
     req = dummy_request(body=json.dumps({"model": "foo", "messages": [{"role": "user", "content": "hi"}]}).encode())
@@ -198,7 +203,7 @@ async def test_handle_proxy_anthropic_conversion(mock_get_model, mock_get_header
 
 @pytest.mark.asyncio
 @patch("api.routers.gcp.chat.httpx.AsyncClient", side_effect=Exception("network error"))
-@patch("api.routers.gcp.chat.get_headers")
+@patch("api.routers.gcp.common.get_headers_and_target")
 @patch("api.routers.gcp.chat.get_model", return_value="test-model")
 async def test_handle_proxy_httpx_exception(mock_get_model, mock_get_headers, mock_async_client, dummy_request):
     req = dummy_request(body=json.dumps({"model": "foo"}).encode())
@@ -242,3 +247,86 @@ def test_get_chat_completion_model_name_unknown_model():
     result = chat.get_chat_completion_model_name(model_alias)
     # Should return the input unchanged
     assert result == model_alias
+
+
+def test_to_vertex_anthropic_streaming_false():
+    openai_messages = {
+        "messages": [
+            {"role": "system", "content": "System prompt."},
+            {"role": "user", "content": "Hello!"},
+            {"role": "assistant", "content": "Hi there!"},
+        ]
+    }
+    result = chat.to_vertex_anthropic(openai_messages, streaming=False)
+    assert result["anthropic_version"] == "vertex-2023-10-16"
+    assert result["max_tokens"] == 256
+    assert result["system"] == "System prompt.\n"
+    assert len(result["messages"]) == 2
+    assert result["messages"][0]["role"] == "user"
+    assert result["messages"][0]["content"][0]["type"] == "text"
+    assert result["messages"][0]["content"][0]["text"] == "Hello!"
+    assert result["messages"][1]["role"] == "assistant"
+    assert result["messages"][1]["content"][0]["type"] == "text"
+    assert result["messages"][1]["content"][0]["text"] == "Hi there!"
+
+
+def test_to_vertex_anthropic_streaming_true():
+    openai_messages = {
+        "messages": [
+            {"role": "system", "content": "System prompt."},
+            {"role": "user", "content": "Hello!"},
+        ]
+    }
+    result = chat.to_vertex_anthropic(openai_messages, streaming=True)
+    assert result["messages"][0]["role"] == "user"
+    assert result["messages"][0]["content"]["type"] == "text"
+    assert result["messages"][0]["content"]["text"] == "Hello!"
+
+
+def test_to_vertex_anthropic_no_system_prompt():
+    openai_messages = {
+        "messages": [
+            {"role": "user", "content": "Hello!"},
+            {"role": "assistant", "content": "Hi there!"},
+        ]
+    }
+    result = chat.to_vertex_anthropic(openai_messages)
+    assert "system" not in result
+    assert len(result["messages"]) == 2
+    assert result["messages"][0]["role"] == "user"
+    assert result["messages"][0]["content"][0]["type"] == "text"
+    assert result["messages"][0]["content"][0]["text"] == "Hello!"
+    assert result["messages"][1]["role"] == "assistant"
+    assert result["messages"][1]["content"][0]["type"] == "text"
+    assert result["messages"][1]["content"][0]["text"] == "Hi there!"
+
+
+def test_to_vertex_anthropic_str_content():
+    openai_messages = {
+        "messages": [
+            {"role": "user", "content": [{"text": "Hello!"}]},
+        ]
+    }
+    result = chat.to_vertex_anthropic(openai_messages)
+    assert isinstance(result["messages"][0]["content"], list)
+    assert "type" not in result["messages"][0]["content"][0]
+    assert result["messages"][0]["content"][0]["text"] == "Hello!"
+
+
+def test_to_vertex_anthropic_non_str_content():
+    openai_messages = {
+        "messages": [
+            {"role": "user", "content": [{"type": "text", "text": "Hello!"}]},
+        ]
+    }
+    result = chat.to_vertex_anthropic(openai_messages)
+    assert isinstance(result["messages"][0]["content"], list)
+    assert result["messages"][0]["content"][0]["type"] == "text"
+    assert result["messages"][0]["content"][0]["text"] == "Hello!"
+
+
+def test_to_vertex_anthropic_empty_messages():
+    openai_messages = {"messages": []}
+    result = chat.to_vertex_anthropic(openai_messages)
+    assert result["messages"] == []
+    assert "system" not in result
