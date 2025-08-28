@@ -1,21 +1,17 @@
 import json
 import logging
-from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 import httpx
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import StreamingResponse
-from google.auth import default
-from google.auth.transport.requests import Request as AuthRequest
 
 from api.auth import api_key_auth
-from api.gcp.credentials.metadata import get_access_token, location, project_id
 from api.modelmapper import get_model
 from api.routers.gcp.common import get_headers_and_target, sse_done, to_openai_usage
 from api.routers.gcp.stream_transformers import handle_data_line
 from api.schema import ChatResponse, ChatStreamResponse, Error
-from api.setting import API_ROUTE_PREFIX, USE_MODEL_MAPPING
+from api.setting import USE_MODEL_MAPPING
 
 known_chat_models = [
     "publishers/mistral-ai/models/mistral-7b-instruct-v0.3",
@@ -45,12 +41,12 @@ def _parse_system_prompts(openai_messages) -> str:
     system_prompts = ""
     for message in openai_messages:
         if message["role"] != "system":
-            # ignore system messages here
+            # ignore non-system messages here
             continue
         assert isinstance(message["content"], str)
         system_prompts += message["content"] + "\n"
 
-        return system_prompts
+    return system_prompts
 
 
 def to_vertex_anthropic(openai_messages, streaming=False):
@@ -60,9 +56,11 @@ def to_vertex_anthropic(openai_messages, streaming=False):
         if m["role"] == "system":
             continue
 
-        text = m["content"] if streaming else [m["content"]]
+        text = m["content"]
         if isinstance(m["content"], str):
             content = {"type": "text", "text": text}
+            if not streaming:
+                content = [content]
         else:
             content = text
 

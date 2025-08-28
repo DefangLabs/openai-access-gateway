@@ -1,6 +1,5 @@
 import json
 import logging
-import time
 from typing import AsyncGenerator
 
 from api.routers.gcp.common import generate_openai_id, sse_chunk, sse_done, to_openai_usage

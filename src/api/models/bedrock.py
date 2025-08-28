@@ -371,6 +371,23 @@ class BedrockModel(BaseChatModel):
                 # Bedrock does not support tool role,
                 # Add toolResult to content
                 # https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ToolResultBlock.html
+                content = []
+                for contentItem in message.content:
+                    if isinstance(contentItem, str):
+                        content.append({"text": contentItem})
+                    elif isinstance(contentItem, TextContent):
+                        content.append({"text": contentItem.text})
+                    elif isinstance(contentItem, ImageContent):
+                        content.append(
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": contentItem.image_url.url,
+                                    "detail": contentItem.image_url.detail or "auto",
+                                },
+                            }
+                        )
+
                 messages.append(
                     {
                         "role": "user",
@@ -378,7 +395,7 @@ class BedrockModel(BaseChatModel):
                             {
                                 "toolResult": {
                                     "toolUseId": message.tool_call_id,
-                                    "content": [{"text": self._extract_text_content(message.content)}],
+                                    "content": content,
                                 }
                             }
                         ],

@@ -38,8 +38,10 @@ def test_to_vertex_anthropic():
     assert result["max_tokens"] == 256
     assert isinstance(result["messages"], list)
     assert result["messages"][0]["role"] == "user"
+    assert result["messages"][0]["content"][0]["type"] == "text"
     assert result["messages"][0]["content"][0]["text"] == "Hello!"
     assert result["messages"][1]["role"] == "assistant"
+    assert result["messages"][1]["content"][0]["type"] == "text"
     assert result["messages"][1]["content"][0]["text"] == "Hi there!"
 
 
@@ -245,3 +247,86 @@ def test_get_chat_completion_model_name_unknown_model():
     result = chat.get_chat_completion_model_name(model_alias)
     # Should return the input unchanged
     assert result == model_alias
+
+
+def test_to_vertex_anthropic_streaming_false():
+    openai_messages = {
+        "messages": [
+            {"role": "system", "content": "System prompt."},
+            {"role": "user", "content": "Hello!"},
+            {"role": "assistant", "content": "Hi there!"},
+        ]
+    }
+    result = chat.to_vertex_anthropic(openai_messages, streaming=False)
+    assert result["anthropic_version"] == "vertex-2023-10-16"
+    assert result["max_tokens"] == 256
+    assert result["system"] == "System prompt.\n"
+    assert len(result["messages"]) == 2
+    assert result["messages"][0]["role"] == "user"
+    assert result["messages"][0]["content"][0]["type"] == "text"
+    assert result["messages"][0]["content"][0]["text"] == "Hello!"
+    assert result["messages"][1]["role"] == "assistant"
+    assert result["messages"][1]["content"][0]["type"] == "text"
+    assert result["messages"][1]["content"][0]["text"] == "Hi there!"
+
+
+def test_to_vertex_anthropic_streaming_true():
+    openai_messages = {
+        "messages": [
+            {"role": "system", "content": "System prompt."},
+            {"role": "user", "content": "Hello!"},
+        ]
+    }
+    result = chat.to_vertex_anthropic(openai_messages, streaming=True)
+    assert result["messages"][0]["role"] == "user"
+    assert result["messages"][0]["content"]["type"] == "text"
+    assert result["messages"][0]["content"]["text"] == "Hello!"
+
+
+def test_to_vertex_anthropic_no_system_prompt():
+    openai_messages = {
+        "messages": [
+            {"role": "user", "content": "Hello!"},
+            {"role": "assistant", "content": "Hi there!"},
+        ]
+    }
+    result = chat.to_vertex_anthropic(openai_messages)
+    assert "system" not in result
+    assert len(result["messages"]) == 2
+    assert result["messages"][0]["role"] == "user"
+    assert result["messages"][0]["content"][0]["type"] == "text"
+    assert result["messages"][0]["content"][0]["text"] == "Hello!"
+    assert result["messages"][1]["role"] == "assistant"
+    assert result["messages"][1]["content"][0]["type"] == "text"
+    assert result["messages"][1]["content"][0]["text"] == "Hi there!"
+
+
+def test_to_vertex_anthropic_str_content():
+    openai_messages = {
+        "messages": [
+            {"role": "user", "content": [{"text": "Hello!"}]},
+        ]
+    }
+    result = chat.to_vertex_anthropic(openai_messages)
+    assert isinstance(result["messages"][0]["content"], list)
+    assert "type" not in result["messages"][0]["content"][0]
+    assert result["messages"][0]["content"][0]["text"] == "Hello!"
+
+
+def test_to_vertex_anthropic_non_str_content():
+    openai_messages = {
+        "messages": [
+            {"role": "user", "content": [{"type": "text", "text": "Hello!"}]},
+        ]
+    }
+    result = chat.to_vertex_anthropic(openai_messages)
+    assert isinstance(result["messages"][0]["content"], list)
+    assert result["messages"][0]["content"][0]["type"] == "text"
+    assert result["messages"][0]["content"][0]["text"] == "Hello!"
+
+
+def test_to_vertex_anthropic_empty_messages():
+    openai_messages = {"messages": []}
+    result = chat.to_vertex_anthropic(openai_messages)
+    assert result["messages"] == []
+    assert "system" not in result
