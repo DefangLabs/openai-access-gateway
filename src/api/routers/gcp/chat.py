@@ -60,10 +60,11 @@ def to_vertex_anthropic(openai_messages, streaming=False):
         if m["role"] == "system":
             continue
 
+        text = m["content"] if streaming else [m["content"]]
         if isinstance(m["content"], str):
-            content = {"type": "text", "text": m["content"]} if streaming else [{"type": "text", "text": m["content"]}]
+            content = {"type": "text", "text": text}
         else:
-            content = m["content"] if streaming else [m["content"]]
+            content = text
 
         messages.append({"role": m["role"], "content": content})
 
