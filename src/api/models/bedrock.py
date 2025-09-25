@@ -177,17 +177,9 @@ class BedrockModel(BaseChatModel):
     def validate(self, chat_request: ChatRequest):
         """Perform basic validation on requests"""
         error = ""
-        if DEBUG:
-            logger.debug("Bedrock validate " + chat_request.model + " list: " + json.dumps(bedrock_model_list))
-            logger.debug(f"Checking model: {repr(chat_request.model)}")
-            logger.debug(
-                f"Available keys include: {repr('anthropic.claude-3-5-sonnet-20241022-v2:0') in bedrock_model_list}"
-            )
 
         # check if model is supported
         if chat_request.model not in bedrock_model_list.keys():
-            if DEBUG:
-                logger.debug(f"Bedrock list: {list(bedrock_model_list.keys())}")
             error = f"Unsupported model '{chat_request.model}'. list of known models: {bedrock_model_list.keys()}"
             logger.error(error)
 
@@ -199,14 +191,8 @@ class BedrockModel(BaseChatModel):
 
     async def _invoke_bedrock(self, chat_request: ChatRequest, stream=False):
         """Common logic for invoke bedrock models"""
-        if DEBUG:
-            logger.info("Raw request: " + chat_request.model_dump_json())
-
         # convert OpenAI chat request to Bedrock SDK request
         args = self._parse_request(chat_request)
-        if DEBUG:
-            logger.info("Bedrock request: " + json.dumps(str(args)))
-
         try:
             if stream:
                 # Run the blocking boto3 call in a thread pool

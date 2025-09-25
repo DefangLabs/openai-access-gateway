@@ -135,11 +135,7 @@ async def stream_generator(
             headers=request_headers,
             json=content_json,
         ) as response:
-            logging.debug(f"Received response with status code: {response.status_code}")
-            logging.debug(f"Response headers: {response.headers}")
-
             async for line in response.aiter_lines():
-                logging.debug(f"Received line: {line}")
                 if not line.strip():
                     continue
 
@@ -152,7 +148,6 @@ async def stream_generator(
                 else:
                     raw_json = line.strip()
                 async for chunk in handle_data_line(raw_json, model_alias):
-                    logging.debug(f"Yielding chunk: '{chunk}'")
                     yield chunk
     yield sse_done()
 
