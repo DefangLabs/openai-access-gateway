@@ -1,0 +1,28 @@
+services:
+  gcpgateway:
+    build:
+      context: ./src
+      dockerfile: Dockerfile_ecs
+    ports:
+      - "8080:80"
+    environment:
+      - OPENAI_API_KEY=secret
+      - GCP_PROJECT_ID=my-project-123456
+      - GCP_REGION=us-central1
+      - PORT=80
+    volumes:
+      - ~/.config/gcloud/:/root/.config/gcloud
+  awsgateway:
+    build:
+      context: ./src
+      dockerfile: Dockerfile_ecs
+    ports:
+      - "8081:80"
+    environment:
+      - OPENAI_API_KEY=secret
+      - AWS_REGION=us-west-2
+      - AWS_ACCESS_KEY_ID=your-access-key-id
+      - AWS_SECRET_ACCESS_KEY=your-secret-access-key
+      - PORT=80
+    volumes:
+      - ~/.aws/:/root/.aws
