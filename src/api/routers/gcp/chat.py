@@ -25,6 +25,7 @@ known_chat_models = [
     "publishers/google/models/gemini-2.0-flash-lite-001",
     "publishers/google/models/gemini-2.5-pro-preview-05-06",
     "publishers/google/models/gemini-2.5-flash-preview-05-20",
+    "publishers/google/models/gemini-2.5-flash",
     "publishers/meta/models/llama3-8b",
     "publishers/meta/models/llama-3-1-8b-instruct",
     "publishers/meta/models/llama2-7b",
